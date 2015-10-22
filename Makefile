@@ -64,10 +64,10 @@ C_INCLUDEDIRS =  # e.g. -I
 
 ifeq ($(findstring 4.4., $(GCCVERS)), 4.4.)
 # gcc44: 
-  C_LIBS = -L$(fortran_libdir) -lgfortran -lgfortranbegin
+  C_LIBS = -L${fortran_libdir} -lgfortran -lgfortranbegin
 else  
 # gcc45, gcc46:
-  C_LIBS = -L$(fortran_libdir) -lgfortran -lm
+  C_LIBS = -L${fortran_libdir} -lgfortran -lm
 # math library -lm or -lquadmath may be required  
 endif
 DEBUG =          # e.g. -g
