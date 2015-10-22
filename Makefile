@@ -53,19 +53,21 @@ PREFIX = .
 #
 # #################################################################
 #
-FCOMP = $(OMPP) $(GCC)
+FCOMP = $(OMPP) $(CC)
 F_FLAGS = -Wall -fautomatic -fno-backslash -O3 -cpp
 #
-CCOMP = $(OMPP) $(GCC) 
+CCOMP = $(OMPP) $(CC) 
 C_FLAGS = -Wall -O3 -Df2cFortran
 C_INCLUDEDIRS =  # e.g. -I
 #.
+#
+
 ifeq ($(findstring 4.4., $(GCCVERS)), 4.4.)
 # gcc44: 
-  C_LIBS = -lgfortran -lgfortranbegin
+  C_LIBS = -L$(fortran_libdir) -lgfortran -lgfortranbegin
 else  
 # gcc45, gcc46:
-  C_LIBS = -lgfortran -lm
+  C_LIBS = -L$(fortran_libdir) -lgfortran -lm
 # math library -lm or -lquadmath may be required  
 endif
 DEBUG =          # e.g. -g
@@ -76,7 +78,7 @@ ifeq ($(SUPPORT_OPENMP),yes)
   F_FLAGS += -fopenmp
 endif
 #
-LOADER = $(OMPP) $(GCC)
+LOADER = $(OMPP) $(CC)
 L_FLAGS = -Wall -O3
 #
 # objects for this project
