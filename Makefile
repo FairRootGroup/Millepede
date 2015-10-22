@@ -53,7 +53,7 @@ PREFIX = .
 #
 # #################################################################
 #
-FCOMP = $(OMPP) $(CC)
+FCOMP = $(OMPP) $(FC)
 F_FLAGS = -Wall -fautomatic -fno-backslash -O3 -cpp
 #
 CCOMP = $(OMPP) $(CC) 
