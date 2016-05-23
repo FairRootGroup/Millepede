@@ -5,6 +5,25 @@
 !> \file
 !! General linear algebra routines.
 !!
+!! \author Volker Blobel, University Hamburg, 2005-2009 (initial Fortran77 version)
+!! \author Claus Kleinwort, DESY (maintenance and developement)
+!!
+!! \copyright
+!! Copyright (c) 2009 - 2015 Deutsches Elektronen-Synchroton,
+!! Member of the Helmholtz Association, (DESY), HAMBURG, GERMANY \n\n
+!! This library is free software; you can redistribute it and/or modify
+!! it under the terms of the GNU Library General Public License as
+!! published by the Free Software Foundation; either version 2 of the
+!! License, or (at your option) any later version. \n\n
+!! This library is distributed in the hope that it will be useful,
+!! but WITHOUT ANY WARRANTY; without even the implied warranty of
+!! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+!! GNU Library General Public License for more details. \n\n
+!! You should have received a copy of the GNU Library General Public
+!! License along with this program (see the file COPYING.LIB for more
+!! details); if not, write to the Free Software Foundation, Inc.,
+!! 675 Mass Ave, Cambridge, MA 02139, USA.
+!!
 !! ***** Collection of utility routines from V. Blobel *****
 !!
 !!     V. Blobel, Univ. Hamburg
@@ -95,8 +114,11 @@ SUBROUTINE sqminv(v,b,n,nrank,diag,next)   ! matrix inversion
     REAL(mpd) :: vkk
     REAL(mpd) :: vjk
 
-    REAL(mpd), PARAMETER :: eps=1.0E-10_mpd
+    !REAL(mpd), PARAMETER :: eps=1.0E-10_mpd
+    REAL(mpd) eps
     !     ...
+    eps = 16.0_mpd * epsilon(eps) ! 16 * precision(mpd)
+
     next0=1
     l=1
     DO i=1,n
@@ -1649,7 +1671,7 @@ SUBROUTINE sort2k(a,n)
         END IF
         IF(lev+2 > nlev) THEN
             CALL peend(33,'Aborted, stack overflow in quicksort')
-          STOP 'SORT2K (quicksort): stack overflow'
+            STOP 'SORT2K (quicksort): stack overflow'
         END IF
         IF(r-i < j-l) THEN
             lr(lev+1)=l
@@ -1728,6 +1750,7 @@ END FUNCTION chindl
 !! decomposition. No fill-in is created ahead in any row or ahead of the
 !! first entry in any column, but existing zero-values will become
 !! non-zero. The decomposition is done "in-place".
+!! (The diagonal will contain the inverse of the diaginal of L).
 !!
 !!  - NRKD = 0   no component removed
 !!
@@ -1741,13 +1764,16 @@ END FUNCTION chindl
 !! by about a word length (see line "test for linear dependence"),
 !! then the pivot is assumed as zero and the entire row/column is
 !! reset to zero, removing the corresponding element from the solution.
+!! Optionally use only diagonal element in this case to preserve rank
+!! (changing band to skyline matrix).
 !!
 !! \param [in]      n      size of matrix
 !! \param [in,out]  c      variable-band matrix, replaced by L
 !! \param [in]      india  pointer array
 !! \param [out]     nrkd   removed components
+!! \param [in]      iopt   >0: use diagonal to preserve rank ('skyline')
 
-SUBROUTINE lltdec(n,c,india,nrkd)
+SUBROUTINE lltdec(n,c,india,nrkd,iopt)
     USE mpdef
 
     IMPLICIT NONE
@@ -1763,8 +1789,12 @@ SUBROUTINE lltdec(n,c,india,nrkd)
     REAL(mpd), INTENT(IN OUT) :: c(*)
     INTEGER(mpi), INTENT(IN)              :: india(n)
     INTEGER(mpi), INTENT(OUT)             :: nrkd
-    
+    INTEGER(mpi), INTENT(IN)              :: iopt
+    REAL(mpd) eps
     !     ...
+    eps = 16.0_mpd * epsilon(eps) ! 16 * precision(mpd) 
+      
+    !     ..
     nrkd=0
     diag=0.0_mpd
     IF(c(india(1)) > 0.0) THEN
@@ -1790,17 +1820,21 @@ SUBROUTINE lltdec(n,c,india,nrkd)
             IF(j /= k) c(kj)=c(kj)*diag
         END DO ! J
   
-        IF(diag+c(india(k)) > diag) THEN      ! test for linear dependence
+        IF(c(india(k)) > eps*diag) THEN      ! test for linear dependence
             c(india(k))=1.0_mpd/SQRT(c(india(k))) ! square root
         ELSE
             DO j=mk,k                  ! reset row K
                 c(india(k)-k+j)=0.0_mpd
             END DO ! J
-            IF(nrkd == 0) THEN
-                nrkd=-k
+            IF (iopt > 0 .and. diag > 0.0) THEN ! skyline
+                c(india(k))=1.0_mpd/SQRT(diag) ! square root
             ELSE
-                IF(nrkd < 0) nrkd=1
-                nrkd=nrkd+1
+                IF(nrkd == 0) THEN
+                    nrkd=-k
+                ELSE
+                    IF(nrkd < 0) nrkd=1
+                    nrkd=nrkd+1
+                END IF
             END IF
         END IF
   
@@ -1840,6 +1874,7 @@ SUBROUTINE lltfwd(n,c,india,x)
         END DO ! J
         x(k)=x(k)*c(india(k))
     END DO ! K
+    
     RETURN
 END SUBROUTINE lltfwd
 
@@ -1860,13 +1895,13 @@ SUBROUTINE lltbwd(n,c,india,x)
 
     IMPLICIT NONE
     INTEGER(mpi) :: j
-    INTEGER(mpi) :: k
+    INTEGER(mpi) :: k   
 
     INTEGER(mpi), INTENT(IN)              :: n
     REAL(mpd), INTENT(IN)     :: c(*)
     INTEGER(mpi), INTENT(IN)              :: india(n)
     REAL(mpd), INTENT(IN OUT) :: x(n)
-
+    
     DO k=n,2,-1                    ! backward loop
         x(k)=x(k)*c(india(k))
         DO j=k-india(k)+india(k-1)+1,k-1
@@ -1874,6 +1909,8 @@ SUBROUTINE lltbwd(n,c,india,x)
         END DO ! J
     END DO ! K
     x(1)=x(1)*c(india(1))
+    
+    RETURN
 END SUBROUTINE lltbwd
 
 !> Decomposition of equilibrium systems.
@@ -1887,12 +1924,13 @@ END SUBROUTINE lltbwd
 !!
 !! \param [in]      n      size of symmetric matrix
 !! \param [in]      m      number of constrains
+!! \param [in]      ls     flag for skyline decomposition
 !! \param [in,out]  c      combined variable-band + constraints matrix, replaced by decomposition
 !! \param [in,out]  india  pointer array
 !! \param [out]     nrkd   removed components
 !! \param [out]     nrkd2  removed components
 !!
-SUBROUTINE equdec(n,m,c,india,nrkd,nrkd2)
+SUBROUTINE equdec(n,m,ls,c,india,nrkd,nrkd2)
     USE mpdef
 
     IMPLICIT NONE
@@ -1900,42 +1938,45 @@ SUBROUTINE equdec(n,m,c,india,nrkd,nrkd2)
     INTEGER(mpi) :: j
     INTEGER(mpi) :: jk
     INTEGER(mpi) :: k
-    INTEGER(mpi) :: ntotal
 
     INTEGER(mpi), INTENT(IN)              :: n
     INTEGER(mpi), INTENT(IN)              :: m
+    INTEGER(mpi), INTENT(IN)              :: ls    
     REAL(mpd), INTENT(IN OUT) :: c(*)
     INTEGER(mpi), INTENT(IN OUT)          :: india(n+m)
     INTEGER(mpi), INTENT(OUT)             :: nrkd
     INTEGER(mpi), INTENT(OUT)             :: nrkd2
 
-        !     ...
-    ntotal=n+n*m+(m*m+m)/2
+    !     ...
 
-    CALL lltdec(n,c,india,nrkd)                  ! decomposition G G^T
-    DO i=1,m
-        CALL lltfwd(n,c,india,c(india(n)+(i-1)*n+1)) ! forward solution K
-    END DO
+    nrkd=0
+    nrkd2=0
+    
+    CALL lltdec(n,c,india,nrkd,ls)             ! decomposition G G^T
+    
+    IF (m>0) THEN
+        DO i=1,m
+            CALL lltfwd(n,c,india,c(india(n)+(i-1)*n+1)) ! forward solution K
+        END DO
 
-    jk=india(n)+n*m
-    DO j=1,m
-        DO k=1,j
-            jk=jk+1
-            c(jk)=0.0_mpd                                 ! product K K^T
-            DO i=1,n
-                c(jk)=c(jk)+c(india(n)+(j-1)*n+i)*c(india(n)+(k-1)*n+i)
+        jk=india(n)+n*m
+        DO j=1,m
+            DO k=1,j
+                jk=jk+1
+                c(jk)=0.0_mpd                                 ! product K K^T
+                DO i=1,n
+                    c(jk)=c(jk)+c(india(n)+(j-1)*n+i)*c(india(n)+(k-1)*n+i)
+                END DO
             END DO
         END DO
-    END DO
 
-    india(n+1)=1
-    DO i=2,m
-        india(n+i)=india(n+i-1)+MIN(i,m)              ! pointer for K K^T
-    END DO
+        india(n+1)=1
+        DO i=2,m
+            india(n+i)=india(n+i-1)+MIN(i,m)              ! pointer for K K^T
+        END DO
 
-    CALL lltdec(m,c(india(n)+n*m+1),india(n+1),nrkd2)  ! decomp. H H^T
-
-    ntotal=n+n*m+(m*m+m)/2
+        CALL lltdec(m,c(india(n)+n*m+1),india(n+1),nrkd2,0)  ! decomp. H H^T
+    ENDIF
 
     RETURN
 END SUBROUTINE equdec
@@ -1967,27 +2008,33 @@ SUBROUTINE equslv(n,m,c,india,x)                   ! solution vector
     REAL(mpd), INTENT(IN)     :: c(*)
     INTEGER(mpi), INTENT(IN)              :: india(n+m)
     REAL(mpd), INTENT(IN OUT) :: x(n+m)
-
+    
     CALL lltfwd(n,c,india,x)                           ! result is u
-    DO i=1,m
-        DO j=1,n
-            x(n+i)=x(n+i)-x(j)*c(india(n)+(i-1)*n+j)         ! g - K u
+        
+    IF (m>0) THEN
+        DO i=1,m
+            DO j=1,n
+                x(n+i)=x(n+i)-x(j)*c(india(n)+(i-1)*n+j)         ! g - K u
+            END DO
         END DO
-    END DO
-    CALL lltfwd(m,c(india(n)+n*m+1),india(n+1),x(n+1)) ! result is v
+        CALL lltfwd(m,c(india(n)+n*m+1),india(n+1),x(n+1)) ! result is v
 
 
-    CALL lltbwd(m,c(india(n)+n*m+1),india(n+1),x(n+1)) ! result is -y
-    DO i=1,m
-        x(n+i)=-x(n+i)                                    ! result is +y
-    END DO
-
-    DO i=1,n
-        DO j=1,m
-            x(i)=x(i)-x(n+j)*c(india(n)+(j-1)*n+i)           ! u - K^T y
+        CALL lltbwd(m,c(india(n)+n*m+1),india(n+1),x(n+1)) ! result is -y
+        DO i=1,m
+            x(n+i)=-x(n+i)                                    ! result is +y
         END DO
-    END DO
+
+        DO i=1,n
+            DO j=1,m
+                x(i)=x(i)-x(n+j)*c(india(n)+(j-1)*n+i)           ! u - K^T y
+            END DO
+        END DO
+    ENDIF
+    
     CALL lltbwd(n,c,india,x)                           ! result is x
+    
+    RETURN
 END SUBROUTINE equslv
 
 !> Constrained preconditioner, decomposition.
@@ -2018,8 +2065,9 @@ END SUBROUTINE equslv
 !! \param [out]    cu    1/sqrt(c)
 !! \param [in,out] a     constraint matrix (size n*p), modified
 !! \param [out]    s     Cholesky decomposed symmetric (P,P) matrix
+!! \param [out]    nrkd  removed components
 
-SUBROUTINE precon(p,n,c,cu,a,s)
+SUBROUTINE precon(p,n,c,cu,a,s,nrkd)
     USE mpdef
 
     IMPLICIT NONE
@@ -2037,10 +2085,12 @@ SUBROUTINE precon(p,n,c,cu,a,s)
     REAL(mpd), INTENT(OUT)    :: cu(n)
     REAL(mpd), INTENT(IN OUT) :: a(n,p)
     REAL(mpd), INTENT(OUT)    :: s((p*p+p)/2)
+    INTEGER(mpi), INTENT(OUT) :: nrkd
 
     REAL(mpd) :: div
     REAL(mpd) :: ratio
     
+    nrkd=0
     DO i=1,(p*p+p)/2
         s(i)=0.0_mpd
     END DO
@@ -2051,6 +2101,7 @@ SUBROUTINE precon(p,n,c,cu,a,s)
             cu(i)=1.0_mpd/SQRT(div)
         ELSE
             cu(i)=0.0_mpd
+            nrkd=nrkd+1
         END IF
         DO j=1,p
             a(i,j)=a(i,j)*cu(i)              ! K = A C^{-1/2}

@@ -1,6 +1,25 @@
 !> \file
 !! Bit field counters.
 !!
+!! \author Volker Blobel, University Hamburg, 2005-2009 (initial Fortran77 version)
+!! \author Claus Kleinwort, DESY (maintenance and developement)
+!!
+!! \copyright
+!! Copyright (c) 2009 - 2015 Deutsches Elektronen-Synchroton,
+!! Member of the Helmholtz Association, (DESY), HAMBURG, GERMANY \n\n
+!! This library is free software; you can redistribute it and/or modify
+!! it under the terms of the GNU Library General Public License as
+!! published by the Free Software Foundation; either version 2 of the
+!! License, or (at your option) any later version. \n\n
+!! This library is distributed in the hope that it will be useful,
+!! but WITHOUT ANY WARRANTY; without even the implied warranty of
+!! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+!! GNU Library General Public License for more details. \n\n
+!! You should have received a copy of the GNU Library General Public
+!! License along with this program (see the file COPYING.LIB for more
+!! details); if not, write to the Free Software Foundation, Inc.,
+!! 675 Mass Ave, Cambridge, MA 02139, USA.
+!!
 !! Count pairs of global parameters for sparse storage of global matrix,
 !! apply pair entries cut and build (compressed) sparsity structure (row offsets, column lists).
 !!
@@ -271,7 +290,7 @@ SUBROUTINE ndbits(ndims,ncmprs,nsparr,mnpair,ihst,jcmprs)
                 !              keep pair ?
                 IF (icount >= mnpair) THEN
                     next=1 ! double
-                    IF (icount <= icmprs.AND.icmprs > 0) next=2 ! single
+                    IF (icount < icmprs.AND.icmprs > 0) next=2 ! single
                     inr(next)=inr(next)+1
                     bitFieldCounters(lb)=ibset(bitFieldCounters(lb),mb+next-1)
                     IF (next /= last.OR.lrgn >= nencdm) THEN

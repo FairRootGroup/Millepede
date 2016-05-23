@@ -2,6 +2,30 @@
 ! Code converted using TO_F90 by Alan Miller
 ! Date: 2012-03-16  Time: 11:06:00
 
+!> \file
+!! Millepede II program, subroutines.
+!!
+!! \author Volker Blobel, University Hamburg, 2005-2009 (initial Fortran77 version)
+!! \author Gero Flucke, University Hamburg (support of C-type binary files)
+!! \author Claus Kleinwort, DESY (maintenance and developement)
+!!
+!! \copyright
+!! Copyright (c) 2009 - 2015 Deutsches Elektronen-Synchroton,
+!! Member of the Helmholtz Association, (DESY), HAMBURG, GERMANY \n\n
+!! This library is free software; you can redistribute it and/or modify
+!! it under the terms of the GNU Library General Public License as
+!! published by the Free Software Foundation; either version 2 of the
+!! License, or (at your option) any later version. \n\n
+!! This library is distributed in the hope that it will be useful,
+!! but WITHOUT ANY WARRANTY; without even the implied warranty of
+!! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+!! GNU Library General Public License for more details. \n\n
+!! You should have received a copy of the GNU Library General Public
+!! License along with this program (see the file COPYING.LIB for more
+!! details); if not, write to the Free Software Foundation, Inc.,
+!! 675 Mass Ave, Cambridge, MA 02139, USA.
+!!
+
 !> \mainpage Overview
 !!
 !! \section intro_sec Introduction
@@ -20,12 +44,15 @@
 !! analysis center of the Helmholtz Terascale alliance
 !! ([www.terascale.de](https://www.wiki.terascale.de/index.php/Millepede_II)).
 !!
+!! The Millepede II software is provided by DESY under the terms of the
+!! [LGPLv2 license](http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html).
+!!
 !! \section install_sec Installation
 !! To install **Millepede** (on a linux system):
 !! 1. Download the software package from the DESY \c svn server to
 !!    \a target directory, e.g.:
 !!
-!!         svn checkout http://svnsrv.desy.de/public/MillepedeII/tags/V04-01-00 target
+!!         svn checkout http://svnsrv.desy.de/public/MillepedeII/tags/V04-03-03 target
 !!
 !! 2. Create **Pede** executable (in \a target directory):
 !!
@@ -40,6 +67,31 @@
 !! \section news_sec News
 !! * 131008: New solution method \ref ch-minresqlp "MINRES-QLP"
 !! [\ref ref_sec "ref 9"] implemented.
+!! * 140226: Reading of C binary files containing *doubles* implemented.
+!! * 141020: Storage of values read from text files as *doubles* implemented.
+!! * 141125: Dynamic entries (from accepted local fits) check implemented.
+!!   (Rejection of local fits may lead to the loss of degrees of freedom.)
+!!   Printout of global parameter counters with new command \ref cmd-printcounts.
+!! * 141126: Weighted constraints implemented (with new command \ref cmd-weightedcons).
+!! * 150210: Solution by elimination for problems with linear equality constraints
+!!   has been implemented (as default, new command \ref cmd-withelim) in addition to the
+!!   Lagrange multiplier method (new command \ref cmd-withmult).
+!! * 150218: Skipping *empty* constraints (without variable parameters).
+!!   With new command \ref cmd-checkinput detailed check of input data (binary files,
+!!   constraints) is performed, but no solution will be determined.
+!!   Some input statistics is available in the output file <tt>millepede.res</tt>.
+!! * 150226: Iteration of entries cut with new command \ref cmd-iterateentries.
+!!   In the second iteration measurements with any parameters fixed by the 
+!!   previous entries cut are skipped. Useful if parameters of measurements have
+!!   different number of entries. 
+!! * 150420: Skipping of empty constraints has to be enabled by new command \ref
+!!   cmd-skipemptycons.
+!! * 150901: Preconditioning for MINRES with skyline matrix (avoiding rank deficits 
+!!   of band matrix) added (selected by second argument in \ref cmd-bandwidth >0).
+!! * 150925: Monitoring of residuals per local fit cycle is selected by \ref cmd-monres.
+!!   The normalized residuals are grouped by the first global label and the median 
+!!   and the RMS (from the median of the absolute deviations) per group are
+!!   written to <tt>millepede.mon</tt>. 
 !!
 !! \section tools_sec Tools
 !! The subdirectory \c tools contains some useful scripts:
@@ -90,20 +142,18 @@
 !! 7. Volker Blobel und Erich Lohrmann, Statistische und numerische Methoden der
 !!    Datenanalyse, Teubner Studienb&uuml;cher, B.G. Teubner, Stuttgart, 1998.
 !!    [Online-Ausgabe](http://www.desy.de/~blobel/eBuch.pdf).
-!! 8. [Systems Optimization Laboratory](http://www.stanford.edu/group/SOL/software/minres.html),
+!! 8. [Systems Optimization Laboratory](http://web.stanford.edu/group/SOL/software/minres),
 !!    Stanford University;\n
 !!    C. C. Paige and M. A. Saunders (1975),
 !!    Solution of sparse indefinite systems of linear equations,
 !!    SIAM J. Numer. Anal. 12(4), pp. 617-629.
-!! 9. [Systems Optimization Laboratory](http://www.stanford.edu/group/SOL/software/minresqlp.html),
+!! 9. [Systems Optimization Laboratory](http://web.stanford.edu/group/SOL/software/minresqlp),
 !!    Stanford University;\n
 !!    Sou-Cheng Choi, Christopher Paige, and Michael Saunders,
 !!    MINRES-QLP: A Krylov subspace method for indefinite or singular
 !!    symmetric systems, SIAM Journal of Scientific Computing 33:4, 1810-1836, 2011,
 !!    [doi:10.1137/100787921](http://dx.doi.org/10.1137/100787921)
 !!
-!! \file
-!! Millepede II program, subroutines.
 
 !> \page changes_page Major changes
 !! Major changes with respect to the \ref draftman_page "draft manual".
@@ -136,7 +186,7 @@
 !! has been \ref ch-openmp "parallelized".
 !! Available are the value for all (and optionally error, global correlation
 !! for few) global parameters.
-!!\subsection ch-minresqlp Advanced Minimal Residual Method (MINRES-QLP)
+!! \subsection ch-minresqlp Advanced Minimal Residual Method (MINRES-QLP)
 !! The \ref minresqlpmodule::minresqlp "MINRES-QLP" implementation [\ref ref_sec "ref 9"]
 !! is a MINRES evolution with improved norm estimates and stopping conditions
 !! (leading potentially to different numbers of internal iterations).
@@ -148,6 +198,13 @@
 !! and to switch to QLP if the (estimated) matrix condition exceeds
 !! \ref cmd-mrestranscond "mrtcnd". Pure QR or QLP factorization can be enforced
 !! by \ref cmd-mresmode "mrmode".
+!!
+!! \subsection ch-elim-const Elimination of constraints
+!! As alternative to the Lagrange multiplier method the solution by elimination
+!! has been added for problems with linear equality constraints.
+!! A \ref mpqldec::qldec "QL factorization" (with Householder reflections) of the
+!! transposed constraints matrix is used to transform to an unconstrained problem.
+!! For sparse matrix storage the sparsity of the global matrix is preserved.
 !!
 !! \section ch-regul Regularization
 !! Optionally a term \f$\tau\cdot\Vert\Vek{x}\Vert\f$ can be added to the objective function
@@ -246,6 +303,8 @@
 !! Automatically switched on in case of rank deficits for constraints.
 !! \subsection opt-f -f
 !! Force iterating of solution (in case of rank deficits for constraints).
+!! \subsection opt-c -c
+!! Check input (binary files, constraints). No solution is determined.
 !!
 !! \section sec-cmd Steering file commands:
 !! In general the commands are defined by a single line:
@@ -265,12 +324,16 @@
 !!
 !! \subsection cmd-bandwidth bandwidth
 !! Set band width \ref mpmod::mbandw "mbandw" for
-!! \ref minresmodule::minres "MINRES" preconditioner to \a number1.
+!! \ref minresmodule::minres "MINRES" preconditioner to \a number1 [0]
+!! and additional flag \ref mpmod::lprecm "lprecm" to \a number2 [0].
 !! \subsection cmd-cache cache
 !! Set (read+write) cache size \ref mpmod::ncache "ncache" to \a number1.
 !! Define cache size and average fill level.
 !! \subsection cmd-cfiles Cfiles
 !! Following binaries are C files.
+!! \subsection cmd-checkinput checkinput
+!! Set check input flag \ref mpmod::icheck "icheck" to 1 (true).
+!! Same as \ref opt-c "-c".
 !! \subsection cmd-chisqcut chisqcut
 !! For local fit \ref an-chisq "setChi^2" cut \ref mpmod::chicut "chicut" to \a number1 [1.],
 !! \ref mpmod::chirem "chirem" to \a number2 [1.].
@@ -286,8 +349,10 @@
 !! Set \ref an-dwcut "down-weighting fraction" cut \ref mpmod::dwcut "dwcut"
 !! to \a number1 (max. 0.5).
 !! \subsection cmd-entries entries
-!! Set \ref an-entries "entries" cut for variable global parameter
-!! \ref mpmod::mreqen "mreqen" to \a number1 [0].
+!! Set \ref an-entries "entries" cuts for variable global parameter
+!! \ref mpmod::mreqenf "mreqenf" to \a number1 [25],
+!! \ref mpmod::mreqena "mreqena" to \a number2 [10] and
+!! \ref mpmod::iteren "iteren" to the product of \a number1 and \a number3 [0].
 !! \subsection cmd-errlabels errlabels
 !! Define (up to 100 in total) global labels \a number1 .. \a numberN
 !! for which the parameter errors are calculated for method MINRES too
@@ -305,6 +370,11 @@
 !! \subsection cmd-hugecut hugecut
 !! For local fit set Chi^2 cut \ref mpmod::chhuge "chhuge"
 !! for \ref sssec-outlierdeb "unreasonable data" to \a number1 [1.].
+!! \subsection cmd-iterateentries iterateentries
+!! Set maximum value \ref mpmod::iteren "iteren" for iteration of entries cut to
+!! \a number1 [maxint]. Can alternatively be set by the \ref cmd-entries command.
+!! For parameters with less entries the cut will be iterated ignoring measurements with
+!! at least one parameter below \ref mpmod::mreqenf "mreqenf".
 !! \subsection cmd-linesearch linesearch
 !! The mode \ref mpmod::lsearch "lsearch" of the \ref par-linesearch "line search"
 !! to improve the solution is set to \a number1.
@@ -337,6 +407,9 @@
 !! \c fullMINRES-QLP : (4,1) or \c sparseMINRES-QLP : (4,2)),
 !! (minimum) number of iterations \ref mpmod::mitera "mitera" to \a number1,
 !! convergence limit \ref mpmod::dflim "dflim" to \a number2.
+!! \subsection cmd-monres monitorresiduals
+!! Set flag \ref mpmod::imonit "imonit" for monitoring of residuals to \a number1 [3]
+!! and increase number of bins (of size 0.1) for internal storage to \a number2 [100].
 !! \subsection cmd-mresmode mresmode
 !! Set \ref minresqlpmodule::minresqlp "MINRES-QLP" factorization mode
 !!  \ref mpmod::mrmode "mrmode" to \a number1.
@@ -365,6 +438,10 @@
 !! Set default pre-sigma \ref mpmod::regpre "regpre" to \a number1 [1].
 !! \subsection cmd-print print
 !! Set print level \ref mpmod::mprint "mprint" to \a number1 [1].
+!! \subsection cmd-printcounts printcounts
+!! Set flag \ref mpmod::ipcntr "ipcntr" to \a number1 [1].
+!! The counters for the global parameters from the accepted local fits (=1)
+!! or from the binary files (>1) will be printed in the result file.
 !! \subsection cmd-printrecord printrecord
 !! \ref an-recpri "Record" numbers with printout.
 !! \subsection cmd-pullrange pullrange
@@ -378,6 +455,9 @@
 !! Set flag \ref mpmod::nregul "nregul" for regularization to 1 (true),
 !! regularization parameter \ref mpmod::regula "regula" to \a number2,
 !! default pre-sigma \ref mpmod::regpre "regpre" to \a number3.
+!! \subsection cmd-skipemptycons skipemptycons
+!! Set flag \ref mpmod::iskpec "iskpec" to 1 (true).
+!! Empty constraints (without variable parameters) will be skipped.
 !! \subsection cmd-subito subito
 !! Set subito (no iterations) flag \ref mpmod::isubit "isubit" to 1 (true).
 !! Same as \ref opt-s "-s".
@@ -386,8 +466,15 @@
 !! to \a number1,
 !! number \ref mpmod::mthrdr "mthrdr" of threads for reading
 !! binary files to \a number2 [\a number1].
-!! \subsection cmd-wconstraint wconstraint
-!! Define \ref sssec_consinf "weighted constraints" for global parameters.
+!! \subsection cmd-weightedcons weightedcons
+!! Set flag \ref mpmod::iwcons "iwcons" to \a number1 [1].
+!! Implements \ref sssec_consinf "weighted constraints" for global parameters.
+!! \subsection cmd-withelim withelimination
+!! Set flag \ref mpmod::icelim "icelim" to 1 (true).
+!! Selects solution by elimination for linear equality constraints.
+!! \subsection cmd-withmult withmultipliers
+!! Set flag \ref mpmod::icelim "icelim" to 0 (false).
+!! Selects solution by Lagrange multipliers for linear equality constraints.
 !! \subsection cmd-wolfe wolfe
 !! For strong Wolfe condition in \ref par-linesearch "line search"
 !! set parameter \ref mpmod::wolfc1 "wolfc1" to \a number1, \ref mpmod::wolfc2
@@ -399,7 +486,8 @@
 !!    + <b>-1</b>   Still running or crashed
 !!    + **00**   Ended normally
 !!    + **01**   Ended with warnings (bad measurements)
-!!    + **02**   Ended with severe warnings (bad global matrix)
+!!    + **02**   Ended with severe warnings (insufficient measurements)
+!!    + **03**   Ended with severe warnings (bad global matrix)
 !!    + **10**   Aborted, no steering file
 !!    + **11**   Aborted, open error for steering file
 !!    + **12**   Aborted, second text file in command line
@@ -408,6 +496,7 @@
 !!    + **15**   Aborted, open error(s) for binary files
 !!    + **16**   Aborted, open error(s) for text files
 !!    + **17**   Aborted, file name too long
+!!    + **18**   Aborted, read error(s) for binary files
 !!    + **20**   Aborted, bad binary records
 !!    + **21**   Aborted, no labels/parameters defined
 !!    + **22**   Aborted, no variable global parameters
@@ -419,6 +508,7 @@
 !!    + **31**   Aborted, memory deallocation failed
 !!    + **32**   Aborted, iteration limit reached in diagonalization
 !!    + **33**   Aborted, stack overflow in quicksort
+!!    + **34**   Aborted, pattern string too long
 
 !> Millepede II main program \ref sssec-stalone "Pede".
 PROGRAM mptwo
@@ -475,13 +565,15 @@ PROGRAM mptwo
     CALL etime(ta,rstp)
     CALL fdate(chdate)
 
+    !     millepede monitoring file
+    lunmon=0
     !     millepede.log file
     lunlog=8
     lvllog=1
     CALL mvopen(lunlog,'millepede.log')
     CALL getenv('HOSTNAME',chost)
     IF (chost(1:1) == ' ') CALL getenv('HOST',chost)
-    WRITE(*,*) '($Rev: 119 $)'
+    WRITE(*,*) '($Rev: 149 $)'
     !$    WRITE(*,*) 'using OpenMP (TM)'
 #ifdef __GFORTRAN__
     WRITE(*,111)  __GNUC__ , __GNUC_MINOR__ , __GNUC_PATCHLEVEL__
@@ -500,6 +592,10 @@ PROGRAM mptwo
 
     CALL filetc   ! command line and steering file analysis
     CALL filetx   ! read text files
+    IF (icheck > 0) THEN
+        WRITE(*,*) '!!!   Checking input only, no calculation of a solution   !!!'
+        WRITE(8,*) '!!!   Checking input only, no calculation of a solution   !!!'
+    END IF
     lvllog=mprint ! export print level
     IF (memdbg > 0) printflagalloc=1 ! debug memory management
     !$    WRITE(*,*)
@@ -553,6 +649,12 @@ PROGRAM mptwo
 
     CALL etime(ta,rloop2)
     times(2)=rloop2-rloop1 ! time for LOOP2
+
+    IF(icheck > 0) THEN
+        CALL prtstat
+        CALL peend(0,'Ended normally')
+        GOTO 99 ! only checking input
+    END IF
 
     !     use different solution methods
 
@@ -769,8 +871,12 @@ PROGRAM mptwo
     IF(nrec3 < huge(nrec3)) THEN
         WRITE(8,*) 'Record',nrec3, ' is first with error (rank deficit/NaN)'
     END IF
-    WRITE(8,*) ' '
-    WRITE(8,*) 'In total 2 +',nloopn,' loops through the data files'
+99  WRITE(8,*) ' '
+    IF (iteren > mreqenf) THEN
+        WRITE(8,*) 'In total 3 +',nloopn,' loops through the data files'
+    ELSE
+        WRITE(8,*) 'In total 2 +',nloopn,' loops through the data files'
+    ENDIF   
     IF (mnrsit > 0) THEN
         WRITE(8,*) ' '
         WRITE(8,*) 'In total    ',mnrsit,' internal MINRES iterations'
@@ -778,6 +884,7 @@ PROGRAM mptwo
 
     WRITE(8,103) times(0),times(1),times(2),times(4),times(7),  &
         times(5),times(8),times(3),times(6)
+
     CALL etime(ta,rst)
     deltat=rst-rstp
     ntsec=nint(deltat,mpi)
@@ -801,7 +908,7 @@ PROGRAM mptwo
             nrejec(2), ' (huge)   ',nrejec(3),' (large)'
         WRITE(8,*) ' '
     END IF
-    CALL explfc(8)
+    IF (icheck <= 0) CALL explfc(8)
 
     WRITE(*,*) ' '
     WRITE(*,*) '  <  Millepede II-P ending   ... ', chdate ! with exit code',ITEXIT,' >'
@@ -832,10 +939,10 @@ SUBROUTINE solglo(ivgbi)
     USE minresModule, ONLY: minres
 
     IMPLICIT NONE
+    REAL(mps) :: par
     REAL(mps) :: dpa
     REAL(mps) :: err
     REAL(mps) :: gcor2
-    REAL(mps) :: par
     INTEGER(mpi) :: iph
     INTEGER(mpi) :: istop
     INTEGER(mpi) :: itgbi
@@ -894,7 +1001,7 @@ SUBROUTINE solglo(ivgbi)
     END IF
 
     par=REAL(globalParameter(itgbi),mps)
-    dpa=par-globalParStart(itgbi)
+    dpa=REAL(par-globalParStart(itgbi),mps)
     gmati=globalCorrections(ivgbi)
     ERR=SQRT(ABS(REAL(gmati,mps)))
     IF(gmati < 0.0_mpd) ERR=-ERR
@@ -910,7 +1017,7 @@ SUBROUTINE solglo(ivgbi)
         diag=REAL(globalMatF(-jk),mpd)
     END IF
     gcor2=REAL(1.0_mpd-1.0_mpd/(gmati*diag),mps) ! global correlation (squared)
-    WRITE(*,102) itgbl,par,globalParPreSigma(itgbi),dpa,ERR,gcor2,itn
+    WRITE(*,102) itgbl,par,REAL(globalParPreSigma(itgbi),mps),dpa,ERR,gcor2,itn
 101 FORMAT(1X,'    label     parameter    presigma      differ',  &
         '       Error gcor^2   iit'/ 1X,'---------',2X,5('-----------'),2X,'----')
 102 FORMAT(i10,2X,4G12.4,f7.4,i6,i4)
@@ -928,10 +1035,10 @@ SUBROUTINE solgloqlp(ivgbi)
     USE minresqlpModule, ONLY: minresqlp
 
     IMPLICIT NONE
+    REAL(mps) :: par
     REAL(mps) :: dpa
     REAL(mps) :: err
     REAL(mps) :: gcor2
-    REAL(mps) :: par
     INTEGER(mpi) :: iph
     INTEGER(mpi) :: istop
     INTEGER(mpi) :: itgbi
@@ -995,7 +1102,7 @@ SUBROUTINE solgloqlp(ivgbi)
     END IF
 
     par=REAL(globalParameter(itgbi),mps)
-    dpa=par-globalParStart(itgbi)
+    dpa=REAL(par-globalParStart(itgbi),mps)
     gmati=globalCorrections(ivgbi)
     ERR=SQRT(ABS(REAL(gmati,mps)))
     IF(gmati < 0.0_mpd) ERR=-ERR
@@ -1011,7 +1118,7 @@ SUBROUTINE solgloqlp(ivgbi)
         diag=REAL(globalMatF(-jk),mpd)
     END IF
     gcor2=REAL(1.0_mpd-1.0_mpd/(gmati*diag),mps) ! global correlation (squared)
-    WRITE(*,102) itgbl,par,globalParPreSigma(itgbi),dpa,ERR,gcor2,itn
+    WRITE(*,102) itgbl,par,REAL(globalParPreSigma(itgbi),mps),dpa,ERR,gcor2,itn
 101 FORMAT(1X,'    label     parameter    presigma      differ',  &
         '       Error gcor^2   iit'/ 1X,'---------',2X,5('-----------'),2X,'----')
 102 FORMAT(i10,2X,4G12.4,f7.4,i6,i4)
@@ -1022,10 +1129,9 @@ SUBROUTINE addcst
     USE mpmod
 
     IMPLICIT NONE
-    REAL(mps) :: climit
-    REAL(mps) :: factr
-    REAL(mps) :: hugeVal
-    REAL(mps) :: sgm
+    REAL(mpd) :: climit
+    REAL(mpd) :: factr
+    REAL(mpd) :: sgm
 
     INTEGER(mpi) :: i
     INTEGER(mpi) :: icgb
@@ -1043,7 +1149,6 @@ SUBROUTINE addcst
     SAVE
     !     ...
     nop=0
-    hugeVal=1.0 !  E6
     IF(lenConstraints == 0) RETURN  ! no constraints
     climit=1.0E-5         ! limit for printout
     irhs=0 ! number of values in DRHS(.), to be printed
@@ -1059,8 +1164,8 @@ SUBROUTINE addcst
             itgbi=inone(label) ! -> ITGBI= index of parameter label
             ivgb =globalParLabelIndex(2,itgbi) ! -> variable-parameter index
   
-            IF(icalcm == 1.AND.ivgb > 0) THEN
-                CALL mupdat(nvgb+icgb,ivgb,REAL(hugeVal*factr,mpd)) ! add to matrix
+            IF(icalcm == 1.AND.nagb > nvgb.AND.ivgb > 0) THEN
+                CALL mupdat(nvgb+icgb,ivgb,factr) ! add to matrix
             END IF
   
             rhs=rhs-factr*globalParameter(itgbi)     ! reduce residuum
@@ -1078,8 +1183,8 @@ SUBROUTINE addcst
                 irhs=0
             END IF
         END IF
-        IF(rhs == 0.0) rhs=1.0E-9
-        globalVector(nvgb+icgb)=rhs*hugeVal
+        vecConsResiduals(icgb)=rhs
+        IF (nagb > nvgb) globalVector(nvgb+icgb)=rhs
     END DO
 
     IF(irhs /= 0) THEN
@@ -1100,8 +1205,8 @@ SUBROUTINE feasma
     USE mpdalc
 
     IMPLICIT NONE
-    REAL(mps) :: factr
-    REAL(mps) :: sgm
+    REAL(mpd) :: factr
+    REAL(mpd) :: sgm
     INTEGER(mpi) :: i
     INTEGER(mpi) :: icgb
     INTEGER(mpi) :: ij
@@ -1114,8 +1219,9 @@ SUBROUTINE feasma
     INTEGER(mpi) :: inone
 
     REAL(mpd):: rhs
+    REAL(mpd):: evmax
+    REAL(mpd):: evmin
     INTEGER(mpl):: length
-    REAL(mpd), DIMENSION(:), ALLOCATABLE :: vecConstraints
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: matConstraintsT
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: auxVectorD
     INTEGER(mpi), DIMENSION(:), ALLOCATABLE :: auxVectorI
@@ -1123,12 +1229,13 @@ SUBROUTINE feasma
     !     ...
     IF(lenConstraints == 0) RETURN  ! no constraints
 
+    IF (nfgb < nvgb) CALL qlini(nvgb,ncgb)
     length=(ncgb*ncgb+ncgb)/2
     CALL mpalloc(matConsProduct, length, 'product matrix of constraints')
     matConsProduct=0.0_mpd
     length=ncgb
     CALL mpalloc(vecConsResiduals, length, 'residuals of constraints')
-    CALL mpalloc(vecConstraints,length,'rhs vector') ! double precision vector
+    CALL mpalloc(vecConsSolution, length, 'solution for constraints')
     CALL mpalloc(auxVectorI,length,'auxiliary array (I)')  ! int aux 1
     CALL mpalloc(auxVectorD,length,'auxiliary array (D)')  ! double aux 1
     !     constraint matrix A and product A A^T (A is stored as transposed)
@@ -1146,13 +1253,14 @@ SUBROUTINE feasma
             factr=listConstraints(i)%value
             itgbi=inone(label) ! -> ITGBI= index of parameter label
             ivgb =globalParLabelIndex(2,itgbi) ! -> variable-parameter index
-            IF(ivgb > 0) matConstraintsT(icgb+(ivgb-1)*ncgb)=factr ! matrix element
+            IF(ivgb > 0) matConstraintsT(ivgb+(icgb-1)*nvgb)=factr ! matrix element
+            globalParCons(itgbi)=globalParCons(itgbi)+1
             rhs=rhs-factr*globalParameter(itgbi)     ! reduce residuum
             i=i+1
             IF(i > lenConstraints) EXIT
             IF(listConstraints(i)%label == 0) EXIT
         END DO
-        vecConstraints(icgb)=rhs        ! constraint discrepancy
+        vecConsResiduals(icgb)=rhs        ! constraint discrepancy
     END DO
 
     DO l=1,nvgb
@@ -1160,13 +1268,13 @@ SUBROUTINE feasma
         DO i=1,ncgb
             DO j=1,i
                 ij=ij+1
-                matConsProduct(ij)=matConsProduct(ij)+matConstraintsT((l-1)*ncgb+i)*matConstraintsT((l-1)*ncgb+j)
+                matConsProduct(ij)=matConsProduct(ij)+matConstraintsT((i-1)*nvgb+l)*matConstraintsT((j-1)*nvgb+l)
             END DO
         END DO
     END DO
 
     !     inversion of product matrix of constraints
-    CALL sqminv(matConsProduct,vecConstraints,ncgb,nrank, auxVectorD, auxVectorI)
+    CALL sqminv(matConsProduct,vecConsResiduals,ncgb,nrank, auxVectorD, auxVectorI)
 
     nmiss1=ncgb-nrank
 
@@ -1185,10 +1293,20 @@ SUBROUTINE feasma
         END IF
     END IF
 
+    ! QL decomposition
+    IF (nfgb < nvgb) THEN
+        print *
+        print *, 'QL decomposition of constraints matrix'
+        CALL qldec(matConstraintsT)
+        ! check eignevalues of L
+        CALL qlgete(evmin,evmax)
+        PRINT *, '   largest  eigenvalue of L: ', evmax
+        PRINT *, '   smallest eigenvalue of L: ', evmin
+    END IF
+
     CALL mpdealloc(matConstraintsT)
     CALL mpdealloc(auxVectorD)
     CALL mpdealloc(auxVectorI)
-    CALL mpdealloc(vecConstraints)
 
     RETURN
 END SUBROUTINE feasma ! matrix for feasible solution
@@ -1205,8 +1323,8 @@ SUBROUTINE feasib(concut,iact)
     USE mpdalc
 
     IMPLICIT NONE
-    REAL(mps) :: factr
-    REAL(mps) :: sgm
+    REAL(mpd) :: factr
+    REAL(mpd) :: sgm
     INTEGER(mpi) :: i
     INTEGER(mpi) :: icgb
     INTEGER(mpi) :: iter
@@ -1224,7 +1342,6 @@ SUBROUTINE feasib(concut,iact)
     REAL(mpd) ::sum3
 
     !                        ! acts on subarray "0"
-    REAL(mpd), DIMENSION(:), ALLOCATABLE :: auxVectorD
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: vecCorrections
     SAVE
 
@@ -1285,12 +1402,11 @@ SUBROUTINE feasib(concut,iact)
         WRITE(*,102) iter,sum1,sum2,sum3
 102     FORMAT(i6,'   rms',g12.4,'  avrg_abs',g12.4,'  max_abs',g12.4)
   
-        CALL mpalloc(auxVectorD,INT(ncgb,mpl),'auxiliary vector (D)')
         CALL mpalloc(vecCorrections,INT(nvgb,mpl),'constraint corrections')
         vecCorrections=0.0_mpd
 
         !      multiply inverse matrix and constraint vector
-        CALL dbsvx(matConsProduct,vecConsResiduals,auxVectorD,ncgb)
+        CALL dbsvx(matConsProduct,vecConsResiduals,vecConsSolution,ncgb)
 
         i=1
         DO icgb=1,ncgb
@@ -1303,7 +1419,7 @@ SUBROUTINE feasib(concut,iact)
                 itgbi=inone(label) ! -> ITGBI= index of parameter label
                 ivgb =globalParLabelIndex(2,itgbi) ! -> variable-parameter index
                 IF(ivgb > 0) THEN
-                    vecCorrections(ivgb)=vecCorrections(ivgb)+auxVectorD(icgb)*factr
+                    vecCorrections(ivgb)=vecCorrections(ivgb)+vecConsSolution(icgb)*factr
                 END IF
                 i=i+1
                 IF(i > lenConstraints) EXIT
@@ -1317,7 +1433,6 @@ SUBROUTINE feasib(concut,iact)
         END DO
 
         CALL mpdealloc(vecCorrections)
-        CALL mpdealloc(auxVectorD)
 
     END DO ! iteration 1 and 2
 
@@ -1378,6 +1493,7 @@ SUBROUTINE peread(more)
     INTEGER(mpi) :: nbuf
     INTEGER(mpi) :: ndata
     INTEGER(mpi) :: noff
+    INTEGER(mpi) :: noffs
     INTEGER(mpi) :: npointer
     INTEGER(mpi) :: npri
     INTEGER(mpi) :: nr
@@ -1409,6 +1525,7 @@ SUBROUTINE peread(more)
     !     ...
     IF(ifile == 0) THEN  ! start/restart
         nrec=0
+        nrecd=0
         ntot=0
         sumRecords=0
         skippedRecords=0
@@ -1440,8 +1557,8 @@ SUBROUTINE peread(more)
 
     !$OMP  PARALLEL &
     !$OMP  DEFAULT(PRIVATE) &
-    !$OMP  SHARED(readBufferInfo,readBufferPointer,readBufferDataI,readBufferDataF, &
-    !$OMP  nPointer,nData,skippedRecords,ndimbuf,NTHR,NFILF,FLOOP, &
+    !$OMP  SHARED(readBufferInfo,readBufferPointer,readBufferDataI,readBufferDataD, &
+    !$OMP  readBufferDataF,nPointer,nData,skippedRecords,ndimbuf,NTHR,NFILF,FLOOP, &
     !$OMP        IFD,KFD,IFILE,NFILB,WFD,XFD) &
     !$OMP  NUM_THREADS(NTHR)
 
@@ -1451,6 +1568,7 @@ SUBROUTINE peread(more)
     iact =readBufferInfo(2,ithr)  ! active thread number
     jrec =readBufferInfo(3,ithr)  ! records read
     ioffp=iact*nPointer
+    noffs=(ithr-1)*ndimbuf        ! offset for intermediate float buffer
 
     files: DO WHILE (jfile > 0)
         kfile=kfd(2,jfile)
@@ -1460,20 +1578,29 @@ SUBROUTINE peread(more)
             nr=ndimbuf
             IF(kfile <= nfilf) THEN ! Fortran file
                 lun=kfile+10
-                READ(lun,IOSTAT=ierrf) n,(readBufferDataF(noff+i),i=1,min(n/2,nr)),&
+                READ(lun,IOSTAT=ierrf) n,(readBufferDataF(noffs+i),i=1,min(n/2,nr)),&
                     (readBufferDataI(noff+i),i=1,min(n/2,nr))
                 nr=n/2
+                ! convert to double
+                DO i=1,nr
+                    readBufferDataD(noff+i)=REAL(readBufferDataF(noffs+i),mpr8)
+                END DO
                 IF (ierrf < 0) REWIND lun ! end-of-file
                 eof=(ierrf /= 0)
             ELSE         ! C file
                 lun=kfile-nfilf
 #ifdef READ_C_FILES
-                CALL readc(readBufferDataF(noff+1),readBufferDataI(noff+1),nr,lun,ierrc)
+                CALL readc(readBufferDataD(noff+1),readBufferDataF(noffs+1),readBufferDataI(noff+1),nr,lun,ierrc)
                 n=nr+nr
+                IF (ierrc > 4) readBufferInfo(6,ithr)=readBufferInfo(6,ithr)+1
 #else
                 ierrc=0
 #endif
                 eof=(ierrc <= 0.AND.ierrc /= -4) ! allow buffer overruns -> skip record
+                IF(eof.AND.ierrc < 0) THEN
+                    CALL peend(18,'Aborted, read error(s) for binary files')
+                    STOP 'PEREAD: stopping due to read errors'
+                END IF
             END IF
             IF(eof) EXIT records   ! end-of-files or error
 
@@ -1491,11 +1618,11 @@ SUBROUTINE peread(more)
                 readBufferInfo(4,ithr)=nbuf
                 readBufferInfo(5,ithr)=noff+nr
 
-                readBufferPointer(ioffp+nbuf)=noff      ! pointer to start of buffer
-                readBufferDataI(noff  )=noff+nr         ! pointer to  end  of buffer
-                readBufferDataI(noff-1)=ifd(kfile)+jrec ! global record number (available with LOOP2)
-                readBufferDataF(noff  )=real(kfile)     ! file number
-                readBufferDataF(noff-1)=wfd(kfile)      ! weight
+                readBufferPointer(ioffp+nbuf)=noff       ! pointer to start of buffer
+                readBufferDataI(noff  )=noff+nr          ! pointer to  end  of buffer
+                readBufferDataI(noff-1)=ifd(kfile)+jrec  ! global record number (available with LOOP2)
+                readBufferDataD(noff  )=REAL(kfile,mpr8) ! file number
+                readBufferDataD(noff-1)=REAL(wfd(kfile),mpr8) ! weight
 
                 IF ((noff+nr+2+ndimbuf >= nData*(iact+1)).OR.(nbuf >= nPointer)) EXIT files ! buffer full
             ELSE
@@ -1547,6 +1674,8 @@ SUBROUTINE peread(more)
             readBufferInfo(1,k)=0
             readBufferInfo(2,k)=-1
             readBufferInfo(3,k)=0
+            nrecd=nrecd+readBufferInfo(6,k)
+            readBufferInfo(6,k)=0
         END IF
     END DO
     !     record limit ?
@@ -1690,7 +1819,7 @@ SUBROUTINE peprep(mode)
         ! parallelize record loop
         !$OMP  PARALLEL DO &
         !$OMP   DEFAULT(PRIVATE) &
-        !$OMP   SHARED(numReadBuffer,readBufferPointer,readBufferDataI,readBufferDataF,ICHUNK) &
+        !$OMP   SHARED(numReadBuffer,readBufferPointer,readBufferDataI,readBufferDataD,ICHUNK) &
         !$OMP   SCHEDULE(DYNAMIC,ICHUNK)
         DO ibuf=1,numReadBuffer ! buffer for current record
             iproc=0
@@ -1748,7 +1877,7 @@ SUBROUTINE pechk(ibuf, nerr)
     USE mpmod
 
     IMPLICIT NONE
-    REAL(mps) :: glder
+    REAL(mpr8) :: glder
     INTEGER(mpi) :: i
     INTEGER(mpi) :: is
     INTEGER(mpi) :: ist
@@ -1767,7 +1896,7 @@ SUBROUTINE pechk(ibuf, nerr)
     SAVE
     !     ...
     inder(i)=readBufferDataI(i)
-    glder(i)=readBufferDataF(i)
+    glder(i)=readBufferDataD(i)
     isfrst(ibuf)=readBufferPointer(ibuf)+1
     islast(ibuf)=readBufferDataI(readBufferPointer(ibuf))
 
@@ -1794,24 +1923,24 @@ SUBROUTINE pechk(ibuf, nerr)
         DO WHILE(inder(is+1) /= 0.AND.is < nst)
             is=is+1
         END DO
-        IF(ja+1 /= jb.OR.glder(jb) >= 0.0) CYCLE outer
+        IF(ja+1 /= jb.OR.glder(jb) >= 0.0_mpr8) CYCLE outer
         !        special data
         jsp=jb          ! pointer to special data
         is=is+NINT(-glder(jb),mpi) ! skip NSP words
     END DO outer
     IF(is > nst) THEN
         ioff = readBufferPointer(ibuf)
-        WRITE(*,100) readBufferDataI(ioff-1), INT(readBufferDataF(ioff),mpi)
+        WRITE(*,100) readBufferDataI(ioff-1), INT(readBufferDataD(ioff),mpi)
 100     FORMAT(' PEREAD: record ', I8,' in file ',I6, ' is broken !!!')
         nerr=nerr+1
     ENDIF
     nan=0
     DO i=ist, nst
-        IF(.NOT.(readBufferDataF(i) <= 0.0).AND..NOT.(readBufferDataF(i) > 0.0)) nan=nan+1
+        IF(.NOT.(readBufferDataD(i) <= 0.0_mpr8).AND..NOT.(readBufferDataD(i) > 0.0_mpr8)) nan=nan+1
     END DO
     IF(nan > 0) THEN
         ioff = readBufferPointer(ibuf)
-        WRITE(*,101) readBufferDataI(ioff-1), INT(readBufferDataF(ioff),mpi), nan
+        WRITE(*,101) readBufferDataI(ioff-1), INT(readBufferDataD(ioff),mpi), nan
 101     FORMAT(' PEREAD: record ', I8,' in file ',I6, ' contains ', I6, ' NaNs !!!')
         nerr= nerr+2
     ENDIF
@@ -1844,7 +1973,7 @@ SUBROUTINE isjajb(nst,is,ja,jb,jsp)
     USE mpmod
 
     IMPLICIT NONE
-    REAL(mps) :: glder
+    REAL(mpr8) :: glder
     INTEGER(mpi) :: i
     INTEGER(mpi) :: inder
 
@@ -1856,7 +1985,7 @@ SUBROUTINE isjajb(nst,is,ja,jb,jsp)
     SAVE
     !     ...
     inder(i)=readBufferDataI(i)
-    glder(i)=readBufferDataF(i)
+    glder(i)=readBufferDataD(i)
 
     jsp=0
     DO
@@ -1876,7 +2005,7 @@ SUBROUTINE isjajb(nst,is,ja,jb,jsp)
         DO WHILE(inder(is+1) /= 0.AND.is < nst)
             is=is+1
         END DO
-        IF(ja+1 /= jb.OR.glder(jb) >= 0.0) EXIT
+        IF(ja+1 /= jb.OR.glder(jb) >= 0.0_mpr8) EXIT
         !        special data
         jsp=jb          ! pointer to special data
         is=is+NINT(-glder(jb),mpi) ! skip NSP words
@@ -1897,20 +2026,20 @@ SUBROUTINE loopn
     USE mpmod
 
     IMPLICIT NONE
-    REAL(mps) :: dsum
+    REAL(mpd) :: dsum
     REAL(mps) :: elmt
-    REAL(mps) :: factrj
-    REAL(mps) :: factrk
-    REAL(mps) :: glder
+    REAL(mpd) :: factrj
+    REAL(mpd) :: factrk
+    REAL(mpr8) :: glder
     REAL(mps) :: peakd
     REAL(mps) :: peaki
     REAL(mps) :: ratae
-    REAL(mps) :: rhs
+    REAL(mpd) :: rhs
     REAL(mps) :: rloop
-    REAL(mps) :: sgm
+    REAL(mpd) :: sgm
     REAL(mps) :: used
     REAL(mps) :: usei
-    REAL(mps) :: weight
+    REAL(mpd) :: weight
     INTEGER(mpi) :: i
     INTEGER(mpi) :: ia
     INTEGER(mpi) :: ib
@@ -1937,6 +2066,10 @@ SUBROUTINE loopn
     INTEGER(mpi) :: nr
     INTEGER(mpi) :: nrej
     INTEGER(mpi) :: inone
+    INTEGER(mpi) :: ilow
+    INTEGER(mpi) :: nlow
+    INTEGER(mpi) :: nzero
+    LOGICAL :: btest
 
     REAL(mpd):: adder
     REAL(mpd)::funref
@@ -1948,7 +2081,7 @@ SUBROUTINE loopn
     isfrst(ibuf)=readBufferPointer(ibuf)+1
     islast(ibuf)=readBufferDataI(readBufferPointer(ibuf))
     inder(i)=readBufferDataI(i)
-    glder(i)=readBufferDataF(i)
+    glder(i)=readBufferDataD(i)
     !     ----- book and reset ---------------------------------------------
     IF(nloopn == 0) THEN      ! first call
         lastit=-1
@@ -1991,6 +2124,7 @@ SUBROUTINE loopn
     !     reset
 
     globalVector=0.0_mpd ! reset rhs vector              IGVEC
+    globalCounter=0
     IF(icalcm == 1) THEN
         globalMatD=0.0_mpd
         globalMatF=0.
@@ -2030,6 +2164,9 @@ SUBROUTINE loopn
         cfd(i)=0.0
         dfd(i)=0
     END DO
+    
+    IF (imonit /= 0) measHists=0 ! reset monitoring histograms
+    
     !     ----- read next data ----------------------------------------------
     DO
         CALL peread(nr)  ! read records
@@ -2049,6 +2186,7 @@ SUBROUTINE loopn
         ioffb=ioffb+lenGlobalVec
         DO k=1,lenGlobalVec
             globalVector(k)=globalVector(k)+globalVector(ioffb+k)
+            globalCounter(k)=globalCounter(k)+globalCounter(ioffb+k)
         END DO
     END DO
 
@@ -2063,6 +2201,39 @@ SUBROUTINE loopn
         WRITE(*,111) nparl,ncrit,usei,used,peaki,peakd
 111     FORMAT(' Write cache usage (#flush,#overrun,<levels>,',  &
             'peak(levels))'/2I7,',',4(f6.1,'%'))
+    END IF
+
+    ! check entries/counters
+    nlow=0
+    ilow=1
+    nzero=0
+    DO i=1,nvgb
+        IF(globalCounter(i) == 0) nzero=nzero+1
+        IF(globalCounter(i) < mreqena) THEN
+            nlow=nlow+1
+            IF(globalCounter(i) < globalCounter(ilow)) ilow=i
+        END IF
+    END DO
+    IF(nlow > 0) THEN
+        nalow=nalow+nlow
+        itgbi=globalParVarToTotal(ilow)
+        print *
+        print *, " ... warning ..." 
+        print *, " global parameters with too few (< MREQENA) accepted entries: ", nlow
+        print *, " minimum entries: ", globalCounter(ilow), " for label ", globalParLabelIndex(1,itgbi)
+        print *
+    END IF   
+    IF(icalcm == 1 .AND. nzero > 0) THEN
+        ndefec = nzero ! rank defect
+        WRITE(*,*)   'Warning: the rank defect of the symmetric',nagb,  &
+            '-by-',nagb,' matrix is ',ndefec,' (should be zero).'
+        WRITE(lun,*) 'Warning: the rank defect of the symmetric',nagb,  &
+            '-by-',nagb,' matrix is ',ndefec,' (should be zero).'
+        IF (iforce == 0) THEN
+            isubit=1
+            WRITE(*,*)   '         --> enforcing SUBITO mode'
+            WRITE(lun,*) '         --> enforcing SUBITO mode'
+        END IF
     END IF
 
     !     ----- after end-of-data add contributions from pre-sigma ---------
@@ -2095,7 +2266,7 @@ SUBROUTINE loopn
         DO ivgb=1,nvgb                        ! add evtl. pre-sigma
             !          WRITE(*,*) 'Index ',IVGB,IVGB,QM(IND6+IVGB)
             IF(globalParPreWeight(ivgb) /= 0.0) THEN
-                IF(ivgb > 0) CALL mupdat(ivgb,ivgb,REAL(globalParPreWeight(ivgb),mpd))
+                IF(ivgb > 0) CALL mupdat(ivgb,ivgb,globalParPreWeight(ivgb))
             END IF
         END DO
     END IF
@@ -2146,13 +2317,14 @@ SUBROUTINE loopn
             factrj=listMeasurements(j)%value
             itgbij=inone(listMeasurements(j)%label) ! total parameter index
             IF(itgbij /= 0) THEN
-                dsum=dsum+factrj*REAL(globalParameter(itgbij),mps)     ! residuum
+                dsum=dsum+factrj*globalParameter(itgbij)     ! residuum
             END IF
             !      add to vector
             ivgbij=0
             IF(itgbij /= 0) ivgbij=globalParLabelIndex(2,itgbij) ! variable-parameter index
             IF(ivgbij > 0) THEN
                 globalVector(ivgbij)=globalVector(ivgbij) -weight*dsum*factrj ! vector
+                globalCounter(ivgbij)=globalCounter(ivgbij)+1
             END IF
   
             IF(icalcm == 1.AND.ivgbij > 0) THEN
@@ -2163,7 +2335,7 @@ SUBROUTINE loopn
                     ivgbik=0
                     IF(itgbik /= 0) ivgbik=globalParLabelIndex(2,itgbik) ! variable-parameter index
                     IF(ivgbij > 0.AND.ivgbik > 0) THEN    !
-                        CALL mupdat(ivgbij,ivgbik,REAL(weight*factrj*factrk,mpd))
+                        CALL mupdat(ivgbij,ivgbik,weight*factrj*factrk)
                     END IF
                 END DO
             END IF
@@ -2254,8 +2426,11 @@ SUBROUTINE loopn
     END IF
 
     lastit=iterat
+    
+    ! monitoring of residuals
+    IF (imonit < 0 .OR. (nloopn == 1 .AND. btest(imonit,0))) CALL monres
 
-101 FORMAT(1X,a6,' =',i10,' = ',a)
+101 FORMAT(1X,a8,' =',i10,' = ',a)
 ! 101  FORMAT(' LOOPN',I6,' Function value',F22.8,10X,I6,' records')
 ! 102  FORMAT('   incl. constraint penalty',F22.8)
 ! 103  FORMAT(I13,3X,A,G12.4)
@@ -2276,7 +2451,7 @@ SUBROUTINE ploopa(lunp)
     WRITE(lunp,101) ! header line
     WRITE(lunp,102) ! header line
 101 FORMAT(' it fc','   fcn_value dfcn_exp  slpr costh  iit st',  &
-        ' ls  step cutf',1X,'rejects hmmsec FMS')
+        ' ls  step cutf',1X,'rejects hhmmss FMS')
 102 FORMAT(' -- --',' ----------- --------  ---- -----  --- --',  &
         ' -- ----- ----',1X,'------- ------ ---')
     RETURN
@@ -2330,11 +2505,11 @@ SUBROUTINE ploopb(lunp)
                 iitera,istopa,lsinfo,stepl, chicut,nrej,nhour,minut,nsecnd,ccalcm(lcalcm)
         ENDIF
     END IF
-103 FORMAT(i3,i3,e12.5,38X,f5.1, 1X,i7,  i2,i2,i3,a4)
+103 FORMAT(i3,i3,e12.5,38X,f5.1, 1X,i7,  i3,i2.2,i2.2,a4)
 104 FORMAT(i3,i3,e12.5,1X,e8.2,f6.3,f6.3,i5,2I3,f6.3,f5.1,  &
-        1X,i7,  i2,i2,i3,a4)
+        1X,i7,  i3,i2.2,i2.2,a4)
 105 FORMAT(i3,i3,e12.5,1X,e8.2,12X,i5,I3,9X,f5.1,  &
-        1X,i7,  i2,i2,i3,a4)
+        1X,i7,  i3,i2.2,i2.2,a4)
     RETURN
 END SUBROUTINE ploopb ! iteration line
 
@@ -2375,7 +2550,7 @@ SUBROUTINE ploopc(lunp)
     stepl=steps(2)
     WRITE(lunp,105) nloopn,fvalue, ratae,lsinfo,  &
         stepl,nrej,nhour,minut,nsecnd,ccalcm(lcalcm)
-105 FORMAT(3X,i3,e12.5,9X,     f6.3,14X,i3,f6.3,6X, i7,  i2,i2,i3,a4)
+105 FORMAT(3X,i3,e12.5,9X,     f6.3,14X,i3,f6.3,6X, i7,  i3,i2.2,i2.2,a4)
     RETURN
 
 END SUBROUTINE ploopc                   ! sub-iteration line
@@ -2405,7 +2580,7 @@ SUBROUTINE ploopd(lunp)
     nsecnd=NINT(secnd,mpi)
 
     WRITE(lunp,106) nhour,minut,nsecnd,ccalcm(lcalcm)
-106 FORMAT(69X,i2,i2,i3,a4)
+106 FORMAT(69X,i3,i2.2,i2.2,a4)
     RETURN
 END SUBROUTINE ploopd
 
@@ -2591,35 +2766,34 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
     USE mpmod
 
     IMPLICIT NONE
-    REAL(mps) :: cauchy
+    REAL(mpd) :: cauchy
     REAL(mps) :: chichi
     REAL(mps) :: chlimt
     REAL(mps) :: chndf
-    REAL(mps) :: chuber
-    REAL(mps) :: down
-    REAL(mps) :: glder
-    REAL(mps) :: pull
-    REAL(mps) :: r1
-    REAL(mps) :: r2
+    REAL(mpd) :: chuber
+    REAL(mpd) :: down
+    REAL(mpr8) :: glder
+    REAL(mpd) :: pull
+    REAL(mpd) :: r1
+    REAL(mpd) :: r2
     REAL(mps) :: rec
-    REAL(mps) :: rerr
-    REAL(mps) :: resid
+    REAL(mpd) :: rerr
+    REAL(mpd) :: resid
     REAL(mps) :: resing
-    REAL(mps) :: resmax
-    REAL(mps) :: rmeas
-    REAL(mps) :: rmloc
-    REAL(mps) :: suwt
+    REAL(mpd) :: resmax
+    REAL(mpd) :: rmeas
+    REAL(mpd) :: rmloc
+    REAL(mpd) :: suwt
     REAL(mps) :: used
-    REAL(mps) :: wght
-    REAL(mps) :: wrc
+    REAL(mpd) :: wght
     REAL(mps) :: chindl
     INTEGER(mpi) :: i
     INTEGER(mpi) :: ia
     INTEGER(mpi) :: ib
     INTEGER(mpi) :: ibuf
     INTEGER(mpi) :: ichunk
-    INTEGER(mpi) :: icmn
-    INTEGER(mpi) :: icost
+    INTEGER(mpl) :: icmn
+    INTEGER(mpl) :: icost
     INTEGER(mpi) :: id
     INTEGER(mpi) :: idiag
     INTEGER(mpi) :: iext
@@ -2641,6 +2815,7 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
     INTEGER(mpi) :: ioffi
     INTEGER(mpi) :: iprdbg
     INTEGER(mpi) :: iproc
+    INTEGER(mpi) :: irbin
     INTEGER(mpi) :: irow
     INTEGER(mpi) :: isfrst
     INTEGER(mpi) :: islast
@@ -2705,15 +2880,15 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
     LOGICAL:: lprnt
     LOGICAL::lhist
     CHARACTER (LEN=3):: chast
-    DATA chuber/1.345/  ! constant for Huber down-weighting
-    DATA cauchy/2.3849/ ! constant for Cauchy down-weighting
+    DATA chuber/1.345_mpd/  ! constant for Huber down-weighting
+    DATA cauchy/2.3849_mpd/ ! constant for Cauchy down-weighting
     SAVE chuber,cauchy
     !     ...
     ijsym(i,j)=MIN(i,j)+(MAX(i,j)*MAX(i,j)-MAX(i,j))/2
     isfrst(ibuf)=readBufferPointer(ibuf)+1
     islast(ibuf)=readBufferDataI(readBufferPointer(ibuf))
     inder(i)=readBufferDataI(i)
-    glder(i)=readBufferDataF(i)
+    glder(i)=readBufferDataD(i)
 
     ichunk=MIN((numReadBuffer+mthrd-1)/mthrd/32+1,256)
     ! reset header, 3 words per thread:
@@ -2728,21 +2903,21 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
     !$OMP  PARALLEL DO &
     !$OMP   DEFAULT(PRIVATE) &
     !$OMP   SHARED(numReadBuffer,readBufferPointer,readBufferDataI, &
-    !$OMP      readBufferDataF,writeBufferHeader,writeBufferInfo, &
-    !$OMP      writeBufferData,writeBufferIndices,writeBufferUpdates,globalVector, &
+    !$OMP      readBufferDataD,writeBufferHeader,writeBufferInfo, &
+    !$OMP      writeBufferData,writeBufferIndices,writeBufferUpdates,globalVector,globalCounter, &
     !$OMP      globalParameter,globalParLabelIndex,globalIndexUsage,backIndexUsage, &
+    !$OMP      measBins,numMeas,measIndex,measRes,measHists, &
     !$OMP      NAGB,NVGB,NAGBN,ICALCM,ICHUNK,NLOOPN,NRECER,NPRDBG,IPRDBG, &
     !$OMP      NEWITE,CHICUT,LHUBER,CHUBER,ITERAT,NRECPR,MTHRD, &
-    !$OMP      DWCUT,CHHUGE,NRECP2,CAUCHY,LFITNP,LFITBB) &
+    !$OMP      DWCUT,CHHUGE,NRECP2,CAUCHY,LFITNP,LFITBB,IMONIT) &
     !$OMP   REDUCTION(+:NDFS,SNDF,DCHI2S,NREJ,NBNDR,NACCF,CHI2F,NDFF) &
     !$OMP   REDUCTION(MAX:NBNDX,NBDRX) &
     !$OMP   REDUCTION(MIN:NREC3) &
     !$OMP   SCHEDULE(DYNAMIC,ICHUNK)
     DO ibuf=1,numReadBuffer                       ! buffer for current record
         nrc=readBufferDataI(isfrst(ibuf)-2)       ! record
-        kfl=NINT(readBufferDataF(isfrst(ibuf)-1),mpi) ! file
-        wrc=readBufferDataF(isfrst(ibuf)-2)       ! weight
-        dw1=REAL(wrc,mpd)
+        kfl=NINT(readBufferDataD(isfrst(ibuf)-1),mpi) ! file
+        dw1=REAL(readBufferDataD(isfrst(ibuf)-2),mpd) ! weight
         dw2=SQRT(dw1)
   
         iproc=0
@@ -2840,17 +3015,18 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
         END IF
         nalg=0                         ! count number of global derivatives
         nalc=0                         ! count number of local derivatives
-        imeas=0
+        neq=0                          ! count number of equations
         ist=isfrst(ibuf)
         nst=islast(ibuf)
         DO ! loop over measurements
             CALL isjajb(nst,ist,ja,jb,jsp)
             IF(ja == 0) EXIT
-            rmeas=glder(ja)               ! data
+            rmeas=REAL(glder(ja),mpd)     ! data
+            neq=neq+1                     ! count equation
             !         subtract global ... from measured value
             DO j=1,ist-jb                 ! global parameter loop
                 itgbi=inder(jb+j)            ! global parameter label
-                rmeas=rmeas-glder(jb+j)*REAL(globalParameter(itgbi),mps) ! subtract   !!! reversed
+                rmeas=rmeas-REAL(glder(jb+j),mpd)*globalParameter(itgbi) ! subtract   !!! reversed
                 IF (icalcm == 1) THEN
                     ij=globalParLabelIndex(2,itgbi)         ! index of variable global parameter
                     IF(ij > 0) THEN
@@ -2864,10 +3040,9 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
                 END IF
             END DO
             IF(lprnt) THEN
-                imeas=imeas+1
-                IF (jb < ist) WRITE(1,102) imeas,glder(ja),rmeas,glder(jb)
+                IF (jb < ist) WRITE(1,102) neq,glder(ja),rmeas,glder(jb)
             END IF
-            readBufferDataF(ja)=rmeas   ! global contribution subtracted
+            readBufferDataD(ja)=REAL(rmeas,mpr8)   ! global contribution subtracted
             DO j=1,jb-ja-1              ! local parameter loop
                 ij=inder(ja+j)
                 nalc=MAX(nalc,ij)       ! number of local parameters
@@ -2899,6 +3074,7 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
   
         nter=1                         ! first loop without down-weighting
         IF(nloopn /= 1.AND.lhuber /= 0) nter=lhuber
+        localCorrections(1:neq) = 0._mpd
   
         !      check matrix for bordered band structure (MBDR+MBND+1 <= NALC)
         mbnd=-1
@@ -2939,9 +3115,9 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
             DO ! loop over measurements
                 CALL isjajb(nst,ist,ja,jb,jsp)
                 IF(ja == 0) EXIT
-                rmeas=glder(ja)               ! data
-                rerr =glder(jb)               ! ... and the error
-                wght =1.0/rerr**2             ! weight from error
+                rmeas=REAL(glder(ja),mpd)     ! data
+                rerr =REAL(glder(jb),mpd)     ! ... and the error
+                wght =1.0_mpd/rerr**2         ! weight from error
                 neq=neq+1                     ! count equation
                 nweig=nweig+1
                 resid=rmeas-localCorrections(neq)           ! subtract previous fit
@@ -2975,12 +3151,12 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
     
                 DO j=1,jb-ja-1 ! normal equations, local parameter loop
                     ij=inder(ja+j)          ! local parameter index J
-                    blvec(ij)=blvec(ij)+REAL(wght,mpd)*REAL(rmeas)*REAL(glder(ja+j),mpd)
+                    blvec(ij)=blvec(ij)+wght*rmeas*REAL(glder(ja+j),mpd)
                     DO k=1,j
                         ik=inder(ja+k)         ! local parameter index K
                         jk=ijsym(ij,ik)        ! index in symmetric matrix
                         clmat(jk)=clmat(jk) &  ! force double precision
-                            +REAL(wght,mpd)*REAL(glder(ja+j),mpd)*REAL(glder(ja+k),mpd)
+                            +wght*REAL(glder(ja+j),mpd)*REAL(glder(ja+k),mpd)
                         !           check for band matrix substructure
                         IF (iter == 1) THEN
                             id=IABS(ij-ik)+1
@@ -2995,11 +3171,11 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
                 kx=-1
                 kbdr=0
                 kbdrx=0
-                icmn=nalc**3 ! cost (*6) should improve by at least factor 2
+                icmn=INT(nalc,mpl)**3 ! cost (*6) should improve by at least factor 2
                 DO k=nalc,2,-1
                     kbnd=k-2
                     kbdr=MAX(kbdr,ibandh(k))
-                    icost=6*(nalc-kbdr)*(kbnd+kbdr+1)**2+2*kbdr**3
+                    icost=6*INT(nalc-kbdr,mpl)*INT(kbnd+kbdr+1,mpl)**2+2*INT(kbdr,mpl)**3
                     IF (icost < icmn) THEN
                         icmn=icost
                         kx=k
@@ -3056,16 +3232,16 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
             DO ! loop over measurements
                 CALL isjajb(nst,ist,ja,jb,jsp)
                 IF(ja == 0) EXIT
-                rmeas=glder(ja)               ! data (global contrib. subtracted)
-                rerr =glder(jb)               ! ... and the error
-                wght =1.0/rerr**2             ! weight from error
+                rmeas=REAL(glder(ja),mpd)     ! data (global contrib. subtracted)
+                rerr =REAL(glder(jb),mpd)     ! ... and the error
+                wght =1.0_mpd/rerr**2         ! weight from error
                 neq=neq+1                     ! count equation
                 rmloc=0.0                     ! local fit result reset
                 DO j=1,jb-ja-1                ! local parameter loop
                     ij=inder(ja+j)
-                    rmloc=rmloc+glder(ja+j)*REAL(blvec(ij),mps) ! local fit result
+                    rmloc=rmloc+REAL(glder(ja+j),mpd)*blvec(ij) ! local fit result
                 END DO
-                localCorrections(neq)=rmloc     ! save local fit result
+                localCorrections(neq)=rmloc   ! save local fit result
                 rmeas=rmeas-rmloc             ! reduced to residual
     
                 !         calculate pulls? (needs covariance matrix)
@@ -3080,21 +3256,30 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
                         END DO
                     END DO
                     !          some variance left to define a pull?
-                    IF (0.999999_mpd/REAL(wght,mpd) > dvar) THEN
-                        pull=rmeas/REAL(SQRT(1.0_mpd/REAL(wght,mpd)-dvar),mps)
+                    IF (0.999999_mpd/wght > dvar) THEN
+                        pull=rmeas/SQRT(1.0_mpd/wght-dvar)
                         IF (lhist) THEN
                             IF (jb < ist) THEN
-                                CALL hmpent(13,pull) ! histogram pull
-                                CALL gmpms(5,REC,pull)
+                                CALL hmpent(13,REAL(pull,mps)) ! histogram pull
+                                CALL gmpms(5,REC,REAL(pull,mps))
                             ELSE
-                                CALL hmpent(14,pull) ! histogram pull
+                                CALL hmpent(14,REAL(pull,mps)) ! histogram pull
                             END IF
                         END IF
+                        !  monitoring
+                        IF (imonit /= 0) THEN
+                            IF (jb < ist) THEN
+                                ij=inder(jb+1) ! group by first global label
+                                irbin=MIN(measBins,max(1,INT(pull*rerr/measRes(ij)/measBinSize+0.5*REAL(measBins,mpd))))
+                                irbin=irbin+measBins*(measIndex(ij)-1+numMeas*iproc)
+                                measHists(irbin)=measHists(irbin)+1
+                            ENDIF
+                        ENDIF
                     END IF
                 END IF
     
                 IF(iter == 1.AND.jb < ist.AND.lhist)  &
-                    CALL gmpms(4,REC,rmeas/rerr) ! residual (with global deriv.)
+                    CALL gmpms(4,REC,REAL(rmeas/rerr,mps)) ! residual (with global deriv.)
     
                 dchi2=wght*rmeas*rmeas
                 !          DCHIT=DCHI2
@@ -3106,8 +3291,8 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
                             dchi2=2.0*chuber*(ABS(resid)/rerr-0.5*chuber)
                         END IF
                     ELSE
-                        wght=wght/(1.0+(resid/rerr/cauchy)**2)
-                        dchi2=LOG(1.0+(resid/rerr/cauchy)**2)*cauchy**2
+                        wght=wght/(1.0_mpd+(resid/rerr/cauchy)**2)
+                        dchi2=LOG(1.0_mpd+(resid/rerr/cauchy)**2)*cauchy**2
                     END IF
                 END IF
     
@@ -3134,15 +3319,15 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
 106             FORMAT(i6,2X,2G12.4,' +-',g12.4,f7.2,1X,a3,f8.2)
 
                 IF(iter == nter) THEN
-                    readBufferDataF(ja)=rmeas            ! store remaining residual
+                    readBufferDataD(ja)=REAL(rmeas,mpr8) ! store remaining residual
                     resmax=MAX(resmax,ABS(rmeas)/rerr)
                 END IF
 
                 IF(iter == 1.AND.lhist) THEN
                     IF (jb < ist) THEN
-                        CALL hmpent( 3,rmeas/rerr) ! histogram norm residual
+                        CALL hmpent( 3,REAL(rmeas/rerr,mps)) ! histogram norm residual
                     ELSE
-                        CALL hmpent(12,rmeas/rerr) ! histogram norm residual
+                        CALL hmpent(12,REAL(rmeas/rerr,mps)) ! histogram norm residual
                     END IF
                 END IF
                 summ=summ+dchi2        ! accumulate chi-square sum
@@ -3150,7 +3335,7 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
             ndf=neq-nrank
             !      external seed ?
             dch2sd=0.0_mpd
-            resing=(REAL(nweig,mps)-suwt)/REAL(nweig,mps)
+            resing=(REAL(nweig,mps)-REAL(suwt,mps))/REAL(nweig,mps)
             IF (lhist) THEN
                 IF(iter == 1) CALL hmpent( 5,REAL(ndf,mps))  ! histogram Ndf
                 IF(iter == 1) CALL hmpent(11,REAL(nalc,mps)) ! histogram Nlocal
@@ -3239,7 +3424,7 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
   
         IF(newite.AND.iterat == 2) THEN ! find record with largest residual
             IF(nrecpr < 0.AND.resmax > writeBufferData(1,iproc+1)) THEN
-                writeBufferData(1,iproc+1)=resmax
+                writeBufferData(1,iproc+1)=REAL(resmax,mps)
                 writeBufferInfo(6,iproc+1)=nrc
             END IF
         END IF
@@ -3260,9 +3445,9 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
             CALL isjajb(nst,ist,ja,jb,jsp)
             IF(ja <= 0) EXIT
     
-            rmeas=glder(ja)               ! data residual
-            rerr =glder(jb)               ! ... and the error
-            wght =1.0/rerr**2             ! weight from measurement error
+            rmeas=REAL(glder(ja),mpd)     ! data residual
+            rerr =REAL(glder(jb),mpd)     ! ... and the error
+            wght =1.0_mpd/rerr**2         ! weight from measurement error
             dchi2=wght*rmeas*rmeas        ! least-square contribution
     
             IF(nloopn /= 1.AND.lhuber /= 0) THEN       ! check residual
@@ -3280,7 +3465,8 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
                 ivgbj=globalParLabelIndex(2,inder(jb+j))     ! variable-parameter index
                 IF(ivgbj > 0) THEN
                     globalVector(ioffb+ivgbj)=globalVector(ioffb+ivgbj)  &
-                        +dw1*wght*rmeas*glder(jb+j) ! vector  !!! reverse
+                        +dw1*wght*rmeas*REAL(glder(jb+j),mpd) ! vector  !!! reverse
+                    globalCounter(ioffb+ivgbj)=globalCounter(ioffb+ivgbj)+1    
                     IF(icalcm == 1) THEN
                         ije=backIndexUsage(ioffe+ivgbj)        ! get index of index, non-zero
                         DO k=1,j
@@ -3291,7 +3477,7 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
                                 ib=MIN(ije,ike)          ! smaller
                                 ij=ib+(ia*ia-ia)/2
                                 writeBufferUpdates(ioffd+ij)=writeBufferUpdates(ioffd+ij)  &
-                                    -dw1*wght*glder(jb+j)*glder(jb+k)
+                                    -dw1*wght*REAL(glder(jb+j),mpd)*REAL(glder(jb+k),mpd)
                             END IF
                         END DO
                     END IF
@@ -3308,7 +3494,7 @@ SUBROUTINE loopbf(nrej,ndfs,sndf,dchi2s, numfil,naccf,chi2f,ndff)
                     DO k=1,jb-ja-1
                         ik=inder(ja+k)           ! local index
                         jk=ik+(ije-1)*nalc       ! matrix index
-                        localGlobalMatrix(jk)=localGlobalMatrix(jk)+dw2*wght*glder(jb+j)*glder(ja+k)
+                        localGlobalMatrix(jk)=localGlobalMatrix(jk)+dw2*wght*REAL(glder(jb+j),mpd)*REAL(glder(ja+k),mpd)
                     END DO
                 END IF
             END DO
@@ -3468,6 +3654,7 @@ END SUBROUTINE loopbf
 !! - difference at last iteration (G14.5)
 !! - error (standard deviation) (G14.5)
 !! - global correlation (F8.3), on request only
+!! - Entries from binary files or during iterations
 !!
 SUBROUTINE prtglo
     USE mpmod
@@ -3477,6 +3664,7 @@ SUBROUTINE prtglo
     REAL(mps):: err
     REAL(mps):: gcor
     INTEGER(mpi) :: i
+    INTEGER(mpi) :: icount
     INTEGER(mpi) :: ie
     INTEGER(mpi) :: iev
     INTEGER(mpi) :: ij
@@ -3512,20 +3700,24 @@ SUBROUTINE prtglo
 
     WRITE(lup,*) 'Parameter   ! first 3 elements per line are',  &
         ' significant (if used as input)'
+
+
     iprlim=10
     DO itgbi=1,ntgb  ! all parameter variables
         itgbl=globalParLabelIndex(1,itgbi)
         ivgbi=globalParLabelIndex(2,itgbi)
         par=REAL(globalParameter(itgbi),mps)      ! initial value
+        icount=0 ! counts
         IF(ivgbi > 0) THEN
-            dpa=par-globalParStart(itgbi)       ! difference
+            icount=globalCounter(ivgbi) ! used in last iteration
+            dpa=REAL(globalParameter(itgbi)-globalParStart(itgbi),mps)       ! difference
             IF(metsol == 1.OR.metsol == 2) THEN
                 ii=ivgbi
                 ii=(ii*ii+ii)/2
                 gmati=globalMatD(ii)
                 ERR=SQRT(ABS(REAL(gmati,mps)))
                 IF(gmati < 0.0_mpd) ERR=-ERR
-                diag=workspaceD(ivgbi)
+                diag=workspaceDiag(ivgbi)
                 gcor=-1.0
                 IF(gmati*diag > 0.0_mpd) THEN   ! global correlation
                     gcor2=1.0_mpd-1.0_mpd/(gmati*diag)
@@ -3533,36 +3725,47 @@ SUBROUTINE prtglo
                 END IF
             END IF
         END IF
+        IF(ipcntr > 1) icount=globalParCounts(itgbi) ! from binary files 
         IF(itgbi <= iprlim) THEN
             IF(ivgbi <= 0) THEN
-                WRITE(*  ,102) itgbl,par,globalParPreSigma(itgbi)
+                WRITE(*  ,102) itgbl,par,REAL(globalParPreSigma(itgbi),mps)
             ELSE
                 IF(metsol == 1.OR.metsol == 2) THEN
                     IF (igcorr == 0) THEN
-                        WRITE(*,102) itgbl,par,globalParPreSigma(itgbi),dpa,ERR
+                        WRITE(*,102) itgbl,par,REAL(globalParPreSigma(itgbi),mps),dpa,ERR
                     ELSE
-                        WRITE(*,102) itgbl,par,globalParPreSigma(itgbi),dpa,ERR,gcor
+                        WRITE(*,102) itgbl,par,REAL(globalParPreSigma(itgbi),mps),dpa,ERR,gcor
                     END IF
                 ELSE
-                    WRITE(*,102) itgbl,par,globalParPreSigma(itgbi),dpa
+                    WRITE(*,102) itgbl,par,REAL(globalParPreSigma(itgbi),mps),dpa
                 END IF
             END IF
         ELSE IF(itgbi == iprlim+1) THEN
             WRITE(*  ,*) '... (further printout suppressed, but see log file)'
         END IF
-  
+
         !      file output
         IF(ivgbi <= 0) THEN
-            WRITE(lup,102) itgbl,par,globalParPreSigma(itgbi)
+            IF (ipcntr /= 0) THEN
+                WRITE(lup,110) itgbl,par,REAL(globalParPreSigma(itgbi),mps),icount
+            ELSE
+                WRITE(lup,102) itgbl,par,REAL(globalParPreSigma(itgbi),mps)
+            END IF               
         ELSE
             IF(metsol == 1.OR.metsol == 2) THEN
-                IF (igcorr == 0) THEN
-                    WRITE(lup,102) itgbl,par,globalParPreSigma(itgbi),dpa,ERR
+                IF (ipcntr /= 0) THEN
+                    WRITE(lup,112) itgbl,par,REAL(globalParPreSigma(itgbi),mps),dpa,ERR,icount            
+                ELSE IF (igcorr /= 0) THEN
+                    WRITE(lup,102) itgbl,par,REAL(globalParPreSigma(itgbi),mps),dpa,ERR,gcor
                 ELSE
-                    WRITE(lup,102) itgbl,par,globalParPreSigma(itgbi),dpa,ERR,gcor
+                    WRITE(lup,102) itgbl,par,REAL(globalParPreSigma(itgbi),mps),dpa,ERR
                 END IF
             ELSE
-                WRITE(lup,102) itgbl,par,globalParPreSigma(itgbi),dpa
+                IF (ipcntr /= 0) THEN
+                    WRITE(lup,111) itgbl,par,REAL(globalParPreSigma(itgbi),mps),dpa,icount
+                ELSE
+                    WRITE(lup,102) itgbl,par,REAL(globalParPreSigma(itgbi),mps),dpa
+                END IF    
             END IF
         END IF
     END DO
@@ -3617,7 +3820,64 @@ SUBROUTINE prtglo
         '         error'/ 1X,'-----------',4X,4('-------------'))
 102 FORMAT(i10,2X,4G14.5,f8.3)
 103 FORMAT(3(i11,f11.7,2X))
+110 FORMAT(i10,2X,2G14.5,28X,i12)
+111 FORMAT(i10,2X,3G14.5,14X,i12)
+112 FORMAT(i10,2X,4G14.5,i12)
 END SUBROUTINE prtglo    ! print final log file
+
+!***********************************************************************
+
+!> Print input statistic
+!!
+!! For each global parameter:
+!! - label (I10)
+!! - parameter value (G14.5)
+!! - presigma (G14.5)
+!! - difference of parameters values (G14.5), = 0.
+!! - Entries from binary files
+!!
+SUBROUTINE prtstat
+    USE mpmod
+
+    IMPLICIT NONE
+    REAL(mps):: par
+    REAL(mps):: presig
+    INTEGER(mpi) :: icount
+    INTEGER(mpi) :: itgbi
+    INTEGER(mpi) :: itgbl
+    INTEGER(mpi) :: ivgbi
+    INTEGER(mpi) :: lup
+    INTEGER(mpi) :: ncon
+
+    SAVE
+    !     ...
+
+    lup=09
+    CALL mvopen(lup,'millepede.res')
+    WRITE(lup,*) '*** Results of checking input only, no solution performed ***'
+    WRITE(lup,*) '! fixed-1: by pre-sigma, -2: by entries cut, -3: by iterated entries cut'
+    WRITE(lup,*) '!      Label       Value     Pre-sigma         Entries Constraints  Status '
+    !iprlim=10
+    DO itgbi=1,ntgb  ! all parameter variables
+        itgbl=globalParLabelIndex(1,itgbi)
+        ivgbi=globalParLabelIndex(2,itgbi)
+        par=REAL(globalParameter(itgbi),mps)      ! initial value
+        presig=REAL(globalParPreSigma(itgbi),mps) ! initial presigma
+        icount=globalParCounts(itgbi) ! from binary files
+        ncon=globalParCons(itgbi) ! number of active constraints
+
+        IF (ivgbi <= 0) THEN
+            WRITE(lup,110) itgbl,par,presig,icount,ncon,ivgbi
+        ELSE
+            WRITE(lup,111) itgbl,par,presig,icount,ncon
+        END IF
+    END DO
+    REWIND lup
+    CLOSE(UNIT=lup)
+
+110 FORMAT(' ! ',i10,2X,2G14.5,2i12,'  fixed',I2)
+111 FORMAT(' ! ',i10,2X,2G14.5,2i12,'  variable')
+END SUBROUTINE prtstat    ! print input statistics
 
 
 !> Product symmetric matrix times vector.
@@ -3629,7 +3889,7 @@ END SUBROUTINE prtglo    ! print final log file
 !! \param [in]   x   vector X
 !! \param [in]   b   result vector B
 
-SUBROUTINE avprod(n,x,b)
+SUBROUTINE avprd0(n,x,b)
     USE mpmod
 
     IMPLICIT NONE
@@ -3643,7 +3903,7 @@ SUBROUTINE avprod(n,x,b)
     INTEGER(mpi) :: jj
     INTEGER(mpi) :: jn
 
-    INTEGER(mpi), INTENT(IN)                      :: n
+    INTEGER(mpi), INTENT(IN)          :: n
     REAL(mpd), INTENT(IN)             :: x(n)
     REAL(mpd), INTENT(OUT)            :: b(n)
     INTEGER(mpl) :: k
@@ -3686,7 +3946,7 @@ SUBROUTINE avprod(n,x,b)
           ! sparse, compressed matrix
         IF(sparseMatrixOffsets(2,1) /= n+1) THEN
             CALL peend(24,'Aborted, vector/matrix size mismatch')
-            STOP 'AVPROD: mismatched vector and matrix'
+            STOP 'AVPRD0: mismatched vector and matrix'
         END IF
         iencdb=nencdb
         iencdm=ishft(1,iencdb)-1
@@ -3766,7 +4026,47 @@ SUBROUTINE avprod(n,x,b)
         !$OMP END PARALLEL DO
     ENDIF
 
+END SUBROUTINE avprd0
+
+!> Product symmetric matrix times vector.
+!!
+!! A(sym) * X => B. Used by \ref minresmodule::minres "MINRES" method (Is most CPU intensive part).
+!! The matrix A is the global matrix in full symmetric or (compressed) sparse storage.
+!! Allows for size of X and smaller than size of matrix in case of solution with constriants by elimination.
+!!
+!! \param [in]   n   size of matrix ( <= size of global matrix)
+!! \param [in]   x   vector X
+!! \param [in]   b   result vector B
+
+SUBROUTINE avprod(n,x,b)
+    USE mpmod
+
+    IMPLICIT NONE
+
+    INTEGER(mpi), INTENT(IN)          :: n
+    REAL(mpd), INTENT(IN)             :: x(n)
+    REAL(mpd), INTENT(OUT)            :: b(n)
+
+    SAVE
+    !     ...
+    IF(n > nagb) THEN
+        CALL peend(24,'Aborted, vector/matrix size mismatch')
+        STOP 'AVPROD: mismatched vector and matrix'
+    END IF
+    ! input to AVPRD0
+    vecXav(1:n)=x
+    vecXav(n+1:nagb)=0.0_mpd
+    !use elimination for constraints ?
+    IF(n < nagb) CALL qlmlq(vecXav,1,.false.) ! Q*x
+    ! calclulate vecBav=globalMat*vecXav
+    CALL AVPRD0(nagb,vecXav,vecBav)
+    !use elimination for constraints ?
+    IF(n < nagb) CALL qlmlq(vecBav,1,.true.) ! Q^t*x
+    ! output from AVPRD0
+    b=vecBav(1:n)
+
 END SUBROUTINE avprod
+
 
 !> Index for sparse storage.
 !!
@@ -4103,17 +4403,14 @@ SUBROUTINE loop1
     INTEGER(mpi) :: ivgbi
     INTEGER(mpi) :: j
     INTEGER(mpi) :: mqi
-    INTEGER(mpi) :: nc21
+    INTEGER(mpi) :: nc31
     INTEGER(mpi) :: nr
     INTEGER(mpi) :: nwrd
     INTEGER(mpi) :: inone
-    REAL(mps) :: param
-    REAL(mps) :: presg
-    REAL(mps) :: prewt
+    REAL(mpd) :: param
+    REAL(mpd) :: presg
+    REAL(mpd) :: prewt
 
-    REAL(mps) :: plvs(3)    ! vector array: real and ...
-    INTEGER(mpi) :: lpvs(3)    ! ... integer
-    EQUIVALENCE (plvs(1),lpvs(1))
     INTEGER(mpl) :: length
     SAVE
     !     ...
@@ -4152,13 +4449,16 @@ SUBROUTINE loop1
         CALL hmpldf(1,'Number of words/record in binary file')
         CALL hmpdef(8,0.0,60.0,'not_stored data per record')
         !     define read buffer
-        nc21=ncache/(21*mthrdr) ! split read cache 1 : 10 : 10 for pointers, ints, floats
-        nwrd=nc21+1
+        nc31=ncache/(31*mthrdr) ! split read cache 1 : 10 : 10*2 for pointers, ints, floats
+        nwrd=nc31+1
         length=nwrd*mthrdr
         CALL mpalloc(readBufferPointer,length,'read buffer, pointer')
-        nwrd=nc21*10+2+ndimbuf
+        nwrd=nc31*10+2+ndimbuf
         length=nwrd*mthrdr
         CALL mpalloc(readBufferDataI,length,'read buffer, integer')
+        CALL mpalloc(readBufferDataD,length,'read buffer, double')
+        ! to read (old) float binary files
+        length=(ndimbuf+2)*mthrdr
         CALL mpalloc(readBufferDataF,length,'read buffer, float')
 
         DO
@@ -4168,6 +4468,7 @@ SUBROUTINE loop1
         END DO
         !     release read buffer
         CALL mpdealloc(readBufferDataF)
+        CALL mpdealloc(readBufferDataD)
         CALL mpdealloc(readBufferDataI)
         CALL mpdealloc(readBufferPointer)
         IF (skippedRecords == 0) THEN
@@ -4208,6 +4509,9 @@ SUBROUTINE loop1
     CALL mpalloc(globalParStart,length,'global parameters at start')
     globalParStart=0.
     CALL mpalloc(globalParCopy,length,'copy of global parameters')
+    CALL mpalloc(globalParCounts,length,'global parameter counts')
+    CALL mpalloc(globalParCons,length,'global parameter constraints')
+    globalParCons=0
 
     DO i=1,lenParameters                  ! parameter start values
         param=listParameters(i)%value
@@ -4235,16 +4539,20 @@ SUBROUTINE loop1
 
     indab=0
     DO i=1,ntgb
-        IF(globalParLabelIndex(2,i) >= mreqen.AND.globalParPreSigma(i) >= 0.0) THEN
-            indab=indab+1
-            globalParLabelIndex(2,i)=indab  ! variable, used in matrix (active)
+        globalParCounts(i) = globalParLabelIndex(2,i)
+        IF (globalParPreSigma(i) < 0.0) THEN
+            globalParLabelIndex(2,i)=-1     ! fixed (pre-sigma), not used in matrix (not active)
+        ELSE IF(globalParCounts(i) < mreqenf) THEN
+            globalParLabelIndex(2,i)=-2     ! fixed (entries cut), not used in matrix (not active)        
         ELSE
-            globalParLabelIndex(2,i)=-1     ! fixed, not used in matrix (not active)
+            indab=indab+1
+            globalParLabelIndex(2,i)=indab  ! variable, used in matrix (active)        
         END IF
     END DO
     globalParHeader(-6)=indab ! counted variable
     nvgb=indab  ! nr of variable parameters
     WRITE(lunlog,*) 'LOOP1:',nvgb, ' is number NVGB of variable parameters'
+    IF(iteren > mreqenf) CALL loop1i ! iterate entries cut
 
     !     translation table of length NVGB of total global indices ---------
     length=nvgb
@@ -4279,9 +4587,9 @@ SUBROUTINE loop1
         presg=globalParPreSigma(itgbi)   ! get pre-sigma
         prewt=0.0              ! pre-weight
         IF(presg > 0.0) THEN
-            prewt=1.0/presg**2           ! 1/presigma^2
+            prewt=1.0/presg**2            ! 1/presigma^2
         ELSE IF(presg == 0.0.AND.regpre > 0.0) THEN
-            prewt=1.0/regpre**2          ! default 1/presigma^2
+            prewt=1.0/REAL(regpre**2,mpd) ! default 1/presigma^2
         END IF
         globalParPreWeight(ivgbi)=regula*prewt    ! weight = factor / presigma^2
     END DO
@@ -4306,7 +4614,11 @@ SUBROUTINE loop1
     IF(mprint /= 0) THEN
         WRITE(*,*) ' '
         WRITE(*,101) '  NREC',nrec,'number of records'
-        WRITE(*,101) 'MREQEN',mreqen,'required number of entries'
+        IF (nrecd > 0) WRITE(*,101) ' NRECD',nrec,'number of records containing doubles'
+        WRITE(*,101) 'MREQENF',mreqenf,'required number of entries (from binary files)'
+        IF(iteren > mreqenf) &
+            WRITE(*,101) 'ITEREN',iteren,'iterate cut for parameters with less entries'
+        WRITE(*,101) 'MREQENA',mreqena,'required number of entries (from accepted fits)'            
         IF (mreqpe > 1) WRITE(*,101)  &
             'MREQPE',mreqpe,'required number of pair entries'
         IF (msngpe >= 1) WRITE(*,101)  &
@@ -4331,14 +4643,134 @@ SUBROUTINE loop1
     END IF
     WRITE(8,*)   ' '
     WRITE(8,101) '  NREC',nrec,'number of records'
-    WRITE(8,101) 'MREQEN',mreqen,'required number of entries'
+    IF (nrecd > 0) WRITE(8,101) ' NRECD',nrec,'number of records containing doubles'
+    WRITE(8,101) 'MREQENF',mreqenf,'required number of entries (from binary files)'
+    IF(iteren > mreqenf) &
+        WRITE(8,101) 'ITEREN',iteren,'iterate cut for parameters with less entries'
+    WRITE(8,101) 'MREQENA',mreqena,'required number of entries (from accepted fits)'
 
     WRITE(lunlog,*) 'LOOP1: ending'
     WRITE(lunlog,*) ' '
     CALL mend
 
-101 FORMAT(1X,a6,' =',i10,' = ',a)
+101 FORMAT(1X,a8,' =',i10,' = ',a)
 END SUBROUTINE loop1
+
+!> Iteration of first data \ref sssec-loop1 "loop".
+!!
+!! Read all data files again skipping measurements with any parameter below the
+!! entries cut to update the number of entries.
+!!
+!! Redefine variable and fixed global parameters (depending on updated entries).
+!!
+SUBROUTINE loop1i
+    USE mpmod
+    USE mpdalc
+
+    IMPLICIT NONE
+    INTEGER(mpi) :: i
+    INTEGER(mpi) :: ibuf
+    INTEGER(mpi) :: ij
+    INTEGER(mpi) :: indab
+    INTEGER(mpi) :: inder
+    INTEGER(mpi) :: isfrst
+    INTEGER(mpi) :: islast
+    INTEGER(mpi) :: ist
+    INTEGER(mpi) :: j
+    INTEGER(mpi) :: ja
+    INTEGER(mpi) :: jb
+    INTEGER(mpi) :: jsp
+    INTEGER(mpi) :: nc31
+    INTEGER(mpi) :: nr
+    INTEGER(mpi) :: nlow
+    INTEGER(mpi) :: nst
+    INTEGER(mpi) :: nwrd
+    REAL(mpr8) :: glder
+
+    INTEGER(mpl) :: length
+    INTEGER(mpi), DIMENSION(:), ALLOCATABLE :: newCounter
+    SAVE
+
+    isfrst(ibuf)=readBufferPointer(ibuf)+1
+    islast(ibuf)=readBufferDataI(readBufferPointer(ibuf))
+    inder(i)=readBufferDataI(i)
+    glder(i)=readBufferDataD(i)
+    !     ...
+    WRITE(lunlog,*) ' '
+    WRITE(lunlog,*) 'LOOP1: iterating'
+    WRITE(*,*) ' '
+    WRITE(*,*) 'LOOP1: iterating'
+
+    length=ntgb
+    CALL mpalloc(newCounter,length,'new entries counter')
+    newCounter=0
+
+    !     define read buffer
+    nc31=ncache/(31*mthrdr) ! split read cache 1 : 10 : 10*2 for pointers, ints, floats
+    nwrd=nc31+1
+    length=nwrd*mthrdr
+    CALL mpalloc(readBufferPointer,length,'read buffer, pointer')
+    nwrd=nc31*10+2+ndimbuf
+    length=nwrd*mthrdr
+    CALL mpalloc(readBufferDataI,length,'read buffer, integer')
+    CALL mpalloc(readBufferDataD,length,'read buffer, double')
+    ! to read (old) float binary files
+    length=(ndimbuf+2)*mthrdr
+    CALL mpalloc(readBufferDataF,length,'read buffer, float')
+
+    DO
+        CALL peread(nr)  ! read records
+        CALL peprep(1)  ! prepare records
+        DO ibuf=1,numReadBuffer           ! buffer for current record        
+            ist=isfrst(ibuf)
+            nst=islast(ibuf)
+            nwrd=nst-ist+1
+            DO ! loop over measurements
+                CALL isjajb(nst,ist,ja,jb,jsp)
+                IF(ja == 0.AND.jb == 0) EXIT
+                IF(ja /= 0) THEN
+                    nlow=0
+                    DO j=1,ist-jb
+                        ij=inder(jb+j)                      ! index of global parameter
+                        ij=globalParLabelIndex(2,ij)        ! change to variable parameter
+                        IF(ij == -2) nlow=nlow+1            ! fixed by entries cut
+                    END DO
+                    IF(nlow == 0) THEN
+                        DO j=1,ist-jb
+                            ij=inder(jb+j)                  ! index of global parameter
+                            newCounter(ij)=newCounter(ij)+1 ! count again
+                        END DO
+                    ENDIF
+                END IF
+            END DO
+            ! end-of-event  
+        END DO
+        IF(nr <= 0) EXIT ! end of data?
+    END DO
+
+    !     release read buffer
+    CALL mpdealloc(readBufferDataF)
+    CALL mpdealloc(readBufferDataD)
+    CALL mpdealloc(readBufferDataI)
+    CALL mpdealloc(readBufferPointer)
+
+    indab=0
+    DO i=1,ntgb
+        IF(globalParLabelIndex(2,i) > 0) THEN
+            IF(newCounter(i) >= mreqenf .OR. globalParCounts(i) >= iteren) THEN
+                indab=indab+1
+                globalParLabelIndex(2,i)=indab  ! variable, used in matrix (active)
+            ELSE
+                globalParLabelIndex(2,i)=-3     ! fixed (iterated entries cut), not used in matrix (not active)
+            END IF
+        END IF
+    END DO
+    globalParHeader(-6)=indab ! counted variable
+    nvgb=indab  ! nr of variable parameters
+    WRITE(lunlog,*) 'LOOP1:',nvgb, ' is number NVGB of variable parameters'
+    CALL mpdealloc(newCounter)
+
+END SUBROUTINE loop1i
 
 !> Second data \ref sssec-loop2 "loop" (number of derivatives, global label pairs).
 !!
@@ -4362,7 +4794,7 @@ SUBROUTINE loop2
     REAL(mps) :: fsum
     REAL(mps) :: gbc
     REAL(mps) :: gbu
-    REAL(mps) :: glder
+    REAL(mpr8) :: glder
     INTEGER(mpi) :: i
     INTEGER(mpi) :: ia
     INTEGER(mpi) :: ib
@@ -4401,7 +4833,7 @@ SUBROUTINE loop2
     INTEGER(mpi) :: naeqna
     INTEGER(mpi) :: naeqnf
     INTEGER(mpi) :: naeqng
-    INTEGER(mpi) :: nc21
+    INTEGER(mpi) :: nc31
     INTEGER(mpi) :: ncachd
     INTEGER(mpi) :: ncachi
     INTEGER(mpi) :: ncachr
@@ -4419,12 +4851,20 @@ SUBROUTINE loop2
     INTEGER(mpi) :: nst
     INTEGER(mpi) :: nwrd
     INTEGER(mpi) :: inone
+    INTEGER(mpi) :: inc
+    INTEGER(mpi) :: itype
+    INTEGER(mpi) :: ivgb
+    INTEGER(mpi) :: ncgbw
+    INTEGER(mpi) :: newlen
+    INTEGER(mpi) :: nvar
+    INTEGER(mpi) :: lastlen
     REAL(mps) :: wgh
     REAL(mps) :: wolfc3
     REAL(mps) :: wrec
     REAL(mps) :: chindl
 
     REAL(mpd)::dstat(3)
+    REAL(mpd)::rerr
     INTEGER(mpl):: noff8
     INTEGER(mpl):: ndimbi
     INTEGER(mpl):: ndimsa(4)
@@ -4464,7 +4904,7 @@ SUBROUTINE loop2
     isfrst(ibuf)=readBufferPointer(ibuf)+1
     islast(ibuf)=readBufferDataI(readBufferPointer(ibuf))
     inder(i)=readBufferDataI(i)
-    glder(i)=readBufferDataF(i)
+    glder(i)=readBufferDataD(i)
     !     ...
     WRITE(lunlog,*) ' '
     WRITE(lunlog,*) 'LOOP2: starting'
@@ -4478,18 +4918,75 @@ SUBROUTINE loop2
 
     !     constraints - determine number of constraints NCGB
     ncgb=0
+    ncgbw=0
+    ncgbe=0
+    newlen=0
+    lastlen=0
+    nvar=-1
     i=0
     last=-1
     !        find next constraint header and count nr of constraints
-    DO WHILE(i < lenConstraints)
-        i=i+1
-        label=listConstraints(i)%label
-        IF(last == 0.AND.label == (-1)) ncgb=ncgb+1
-        last=label
-    END DO
-    WRITE(*,*) 'LOOP2:',ncgb,' constraints'
+    IF (lenConstraints > 0) THEN
+        DO WHILE(i < lenConstraints)
+            i=i+1
+            label=listConstraints(i)%label
+            IF(last == 0.AND.label < 0) THEN
+                IF (ncgb > 0 .AND. icheck>0) WRITE(*,113) ncgb, newlen-lastlen-3, nvar
+                IF (nvar == 0) ncgbe=ncgbe+1
+                IF (nvar == 0 .AND. iskpec > 0) THEN 
+                    ! overwrite
+                    newlen=lastlen                    
+                    ! copy previous value (for label 0)
+                    newlen=newlen+1
+                    listConstraints(newlen)%value=listConstraints(i-1)%value
+                ELSE
+                    lastlen=newlen-1 ! end of last accepted constraint
+                END IF
+                ncgb=ncgb+1
+                itype=-label
+                IF(itype == 2) ncgbw=ncgbw+1
+                nvar=0
+            END IF
+            last=label
+            IF(label > 0) THEN
+                itgbi=inone(label) ! -> ITGBI= index of parameter label
+                ivgb =globalParLabelIndex(2,itgbi) ! -> variable-parameter index
+                IF (ivgb > 0) nvar=nvar+1
+            END IF
+            IF(label > 0.AND.itype == 2) THEN  ! weighted constraints
+                itgbi=inone(label) ! -> ITGBI= index of parameter label
+                listConstraints(i)%value=listConstraints(i)%value*globalParCounts(itgbi)
+            END IF
+            newlen=newlen+1
+            listConstraints(newlen)%label=listConstraints(i)%label ! copy label
+            listConstraints(newlen)%value=listConstraints(i)%value ! copy value
+        END DO
+        IF (ncgb > 0 .AND. icheck>0) WRITE(*,113) ncgb, newlen-lastlen-2, nvar
+        IF (nvar == 0) ncgbe=ncgbe+1
+        IF (nvar == 0 .AND. iskpec > 0) newlen=lastlen
+    END IF
+    lenConstraints=newlen
+    IF (ncgbe > 0 .AND. iskpec > 0) THEN
+        WRITE(*,*) 'LOOP2:',ncgbe,' empty constraints skipped'
+        ncgb=ncgb-ncgbe
+    END IF
+    IF (ncgbw == 0) THEN
+        WRITE(*,*) 'LOOP2:',ncgb,' constraints accepted'
+    ELSE
+        WRITE(*,*) 'LOOP2:',ncgb,' constraints accepted,',ncgbw, 'weighted'
+    END IF
 
-    nagb=nvgb+ncgb ! total number of fit parameters
+    IF (icelim > 0) THEN ! elimination
+        nagb=nvgb         ! total number of parameters
+        nfgb=nvgb-ncgb    ! number of fit parameters
+        nprecond(1)=0     ! number of constraints for preconditioner
+        nprecond(2)=nfgb  ! matrix size for preconditioner
+    ELSE                 ! Lagrange multipliers
+        nagb=nvgb+ncgb    ! total number of parameters
+        nfgb=nagb         ! number of fit parameters
+        nprecond(1)=ncgb  ! number of constraints for preconditioner
+        nprecond(2)=nvgb  ! matrix size for preconditioner
+    ENDIF
     noff8=int8(nagb)*int8(nagb-1)/2
 
     !     read all data files and add all variable index pairs -------------
@@ -4498,6 +4995,16 @@ SUBROUTINE loop2
         IF (mcmprs /= 0) numbit=MAX(numbit,2)  ! identify single entries for compression
         CALL clbits(nagb,ndimbi,nencdb,numbit) ! get dimension for bit storage, encoding info
     END IF
+    
+    IF (imonit /= 0) THEN
+        length=ntgb
+        CALL mpalloc(measIndex,length,'measurement counter/index')
+        measIndex=0
+        CALL mpalloc(measRes,length,'measurement resolution')
+        measRes=0.0_mps
+        lunmon=9
+        CALL mvopen(lunmon,'millepede.mon')
+    ENDIF
 
     !     reading events===reading events===reading events===reading events=
     nrecf =0  ! records with fixed global parameters
@@ -4519,13 +5026,16 @@ SUBROUTINE loop2
         dstat(k)=0.0_mpd
     END DO
     !     define read buffer
-    nc21=ncache/(21*mthrdr) ! split read cache 1 : 10 : 10 for pointers, ints, floats
-    nwrd=nc21+1
+    nc31=ncache/(31*mthrdr) ! split read cache 1 : 10 : 10*2 for pointers, ints, floats
+    nwrd=nc31+1
     length=nwrd*mthrdr
     CALL mpalloc(readBufferPointer,length,'read buffer, pointer')
-    nwrd=nc21*10+2+ndimbuf
+    nwrd=nc31*10+2+ndimbuf
     length=nwrd*mthrdr
     CALL mpalloc(readBufferDataI,length,'read buffer, integer')
+    CALL mpalloc(readBufferDataD,length,'read buffer, real')
+    ! to read (old) float binary files
+    length=(ndimbuf+2)*mthrdr
     CALL mpalloc(readBufferDataF,length,'read buffer, float')
 
     DO
@@ -4537,8 +5047,8 @@ SUBROUTINE loop2
             !     Printout for DEBUG
             IF(nrec <= mdebug) THEN
                 nda=0
-                kfile=NINT(readBufferDataF(isfrst(ibuf)-1),mpi) ! file
-                wrec =readBufferDataF(isfrst(ibuf)-2)       ! weight
+                kfile=NINT(readBufferDataD(isfrst(ibuf)-1),mpi) ! file
+                wrec =REAL(readBufferDataD(isfrst(ibuf)-2),mps) ! weight
                 WRITE(*,*) ' '
                 WRITE(*,*) 'Record number ',nrec,' from file ',kfile
                 IF (wgh /= 1.0) WRITE(*,*) '       weight ',wrec
@@ -4583,7 +5093,16 @@ SUBROUTINE loop2
                 naeqn=naeqn+1
                 naeqna=naeqna+1
                 IF(ja /= 0) THEN
-                    IF (ist > jb) naeqng=naeqng+1
+                    IF (ist > jb) THEN
+                        naeqng=naeqng+1
+                        ! monitoring, group measurements, sum up entries and errors
+                        IF (imonit /= 0) THEN
+                            rerr =REAL(glder(jb),mpd)     ! the error
+                            ij=inder(jb+1)               ! index of first global parameter, used to group measurements
+                            measIndex(ij)=measIndex(ij)+1
+                            measRes(ij)=measRes(ij)+rerr
+                        END IF
+                    END IF    
                     nfixed=0
                     DO j=1,ist-jb
                         ij=inder(jb+j)                     ! index of global parameter
@@ -4671,7 +5190,7 @@ SUBROUTINE loop2
                         '(float)       [%]       [GB]'
                 END IF
                 nmatmo=nmatmo+1
-                jcmprs=MAX(mcmprs,msngpe)
+                jcmprs=MAX(mcmprs,msngpe+1)
                 CALL ckbits(ndimsa,mreqpe,jcmprs)
                 gbc=1.0E-9*REAL((mpi*ndimsa(2)+mpd*ndimsa(3)+mps*ndimsa(4))/mpi*(BIT_SIZE(1_mpi)/8),mps) ! GB compressed
                 gbu=1.0E-9*REAL(((mpi+mpd)*(ndimsa(3)+ndimsa(4)))/mpi*(BIT_SIZE(1_mpi)/8),mps)             ! GB uncompressed
@@ -4693,6 +5212,7 @@ SUBROUTINE loop2
     END DO
     !     release read buffer
     CALL mpdealloc(readBufferDataF)
+    CALL mpdealloc(readBufferDataD)
     CALL mpdealloc(readBufferDataI)
     CALL mpdealloc(readBufferPointer)
 
@@ -4714,6 +5234,7 @@ SUBROUTINE loop2
         i=0
         icgb=0
         last=-1
+        inc=MAX(mreqpe, msngpe+1) !  keep constraints in double precision
         !        find next constraint header
         DO WHILE(i < lenConstraints)
             i=i+1
@@ -4722,8 +5243,8 @@ SUBROUTINE loop2
             IF(label > 0) THEN
                 itgbi=inone(label)
                 ij=globalParLabelIndex(2,itgbi)         ! change to variable parameter
-                IF(ij > 0) THEN
-                    CALL inbits(nvgb+icgb,ij,mreqpe)
+                IF(ij > 0 .AND. nagb > nvgb) THEN
+                    CALL inbits(nvgb+icgb,ij,inc)
                 END IF
             END IF
             last=label
@@ -4764,6 +5285,18 @@ SUBROUTINE loop2
         END DO
     END IF
 
+    numMeas=0 ! number of measurement groups
+    IF (imonit /= 0) THEN
+        DO i=1,ntgb
+            IF (measIndex(i) > 0) THEN
+                numMeas=numMeas+1
+                measRes(i) = measRes(i)/REAL(measIndex(i),mpd)
+                measIndex(i) = numMeas
+            END IF
+        END DO
+        length=numMeas*mthrd*measBins
+        CALL mpalloc(measHists,length,'measurement counter')
+    END IF
     !     print numbers ----------------------------------------------------
 
     IF (nagb >= 65536) THEN
@@ -4780,7 +5313,7 @@ SUBROUTINE loop2
             ihis=15
             CALL hmpdef(ihis,0.0,REAL(mhispe,mps), 'NDBITS: #off-diagonal elements')
         END IF
-        jcmprs=MAX(mcmprs,msngpe)
+        jcmprs=MAX(mcmprs,msngpe+1)
         IF (jcmprs > 0.AND.numbit > 1) nspc=2 ! mixed precision storage
         length=nagb*nspc
         CALL mpalloc(sparseMatrixCompression,length,'INBITS: row compression')
@@ -4816,13 +5349,16 @@ SUBROUTINE loop2
     END DO
     ncachr=NINT(REAL(ncache,mps)*fcache(1),mpi) ! read cache
     !     define read buffer
-    nc21=ncachr/(21*mthrdr) ! split read cache 1 : 10 : 10 for pointers, ints, floats
-    nwrd=nc21+1
+    nc31=ncachr/(31*mthrdr) ! split read cache 1 : 10 : 10*2 for pointers, ints, floats
+    nwrd=nc31+1
     length=nwrd*mthrdr
     CALL mpalloc(readBufferPointer,length,'read buffer, pointer')
-    nwrd=nc21*10+2+ndimbuf
+    nwrd=nc31*10+2+ndimbuf
     length=nwrd*mthrdr
     CALL mpalloc(readBufferDataI,length,'read buffer, integer')
+    CALL mpalloc(readBufferDataD,length,'read buffer, real')
+    ! to read (old) float binary files
+    length=(ndimbuf+2)*mthrdr
     CALL mpalloc(readBufferDataF,length,'read buffer, float')
 
     ncachi=NINT(REAL(ncache,mps)*fcache(2),mpi) ! index cache
@@ -4858,8 +5394,9 @@ SUBROUTINE loop2
         WRITE(lu,102) '(all parameters, appearing in binary files)'
         WRITE(lu,101) 'NVGB',nvgb,'number of variable parameters'
         WRITE(lu,102) '(appearing in fit matrix/vectors)'
-        WRITE(lu,101) 'NAGB',nagb,'number of fit parameters'
+        WRITE(lu,101) 'NAGB',nagb,'number of all parameters'
         WRITE(lu,102) '(including Lagrange multiplier or reduced)'
+        WRITE(lu,101) 'NFGB',nfgb,'number of fit parameters'
         WRITE(lu,101) 'MBANDW',mbandw,'band width of band matrix'
         WRITE(lu,102) '(if =0, no band matrix)'
         IF (nagb >= 65536) THEN
@@ -4915,6 +5452,13 @@ SUBROUTINE loop2
         END IF
         IF(dflim /= 0.0) THEN
             WRITE(lu,103) 'Convergence assumed, if expected dF <',dflim
+        END IF
+        IF(ncgb > 0) THEN
+            IF(nfgb < nvgb) THEN
+                WRITE(lu,*) 'Constraints handled by elimination'
+            ELSE
+                WRITE(lu,*) 'Constraints handled by Lagrange multipliers'
+            ENDIF
         END IF
   
     END DO ! print loop
@@ -4990,11 +5534,102 @@ SUBROUTINE loop2
     WRITE(lunlog,*) 'LOOP2: ending'
     WRITE(lunlog,*) ' '
     CALL mend
-101 FORMAT(1X,a6,' =',i10,' = ',a)
+101 FORMAT(1X,a8,' =',i10,' = ',a)
 102 FORMAT(22X,a)
 103 FORMAT(1X,a,g12.4)
 106 FORMAT(i6,2(3X,f9.3,f12.1,3X))
+113 FORMAT(' constraint',i6,' : ',i9,' parameters,',i9,' variable') 
 END SUBROUTINE loop2
+
+!> Monitor input residuals.
+!!
+!! Read all data files again to monitor input residuals
+!!
+SUBROUTINE monres
+    USE mpmod
+    USE mpdalc
+
+    IMPLICIT NONE
+    INTEGER(mpi) :: i
+    INTEGER(mpi) :: ij
+    INTEGER(mpi) :: imed
+    INTEGER(mpi) :: j
+    INTEGER(mpi) :: k
+    INTEGER(mpi) :: nent
+    INTEGER(mpi), DIMENSION(measBins) :: isuml ! location
+    INTEGER(mpi), DIMENSION(measBins) :: isums ! scale
+    REAL(mps) :: amed
+    REAL(mps) :: amad
+    
+    INTEGER(mpl) :: ioff
+    LOGICAL :: lfirst
+    SAVE
+    DATA lfirst /.TRUE./
+
+    ! combine data from threads
+    ioff=0
+    DO i=2,mthrd
+        ioff=ioff+measBins*numMeas
+        DO j=1,measBins*numMeas
+            measHists(j)=measHists(j)+measHists(ioff+j)
+        END DO
+    END DO
+    
+    IF (lfirst) THEN
+        WRITE(lunmon,'(A)') '*** Normalized residuals grouped by first global label (per local fit cycle) ***'
+        WRITE(lunmon,'(A)') '! LFC     Label   Entries        Median  RMS(MAD)          <error>'
+        lfirst=.false.
+    END IF
+
+    ! analyze histograms
+    ioff=0
+    DO i=1,ntgb
+        IF (measIndex(i) > 0) THEN
+            isuml=0
+            ! sum up content                                                                     
+            isuml(1)=measHists(ioff+1)                                                           
+            DO j=2,measBins                                                                      
+                isuml(j)=isuml(j-1)+measHists(ioff+j)                                            
+            END DO                                                                               
+            nent=isuml(measBins)                                                                 
+            ! get median (for location)                                                          
+            DO j=2,measBins                                                                      
+                IF (2*isuml(j) > nent) EXIT                                                      
+            END DO                                                                               
+            imed=j                                                                               
+            amed=REAL(j,mps)
+            IF (isuml(j) > isuml(j-1)) amed=amed+REAL(nent-2*isuml(j-1),mps)/REAL(2*isuml(j)-2*isuml(j-1),mps)     
+            amed=REAL(measBinSize,mps)*(amed-REAL(measBins/2,mps))
+            ! sum up differences                                                                 
+            isums = 0                                                                            
+            DO j=imed,measBins                                                                   
+                k=j-imed+1                                                                       
+                isums(k)=isums(k)+measHists(ioff+j)                                              
+            END DO                                                                               
+            DO j=imed-1,1,-1                                                                     
+                k=imed-j                                                                         
+                isums(k)=isums(k)+measHists(ioff+j)                                              
+            END DO                                                                               
+            DO j=2, measBins                                                                     
+                isums(j)=isums(j)+isums(j-1)
+            END DO                                                                               
+            ! get median (for scale)                                                             
+            DO j=2,measBins                                                                      
+                IF (2*isums(j) > nent) EXIT                                                      
+            END DO                                                                               
+            amad=REAL(j-1,mps)
+            IF (isums(j) > isums(j-1)) amad=amad+REAL(nent-2*isums(j-1),mps)/REAL(2*isums(j)-2*isums(j-1),mps)     
+            amad=REAL(measBinSize,mps)*amad
+            ij=globalParLabelIndex(1,i)                                                    
+            WRITE(lunmon,110) nloopn, ij, nent, amed, amad*1.4826, REAL(measRes(i),mps)                                        
+            !                                                                                    
+            ioff=ioff+measBins
+        END IF                                                                   
+    END DO
+ 
+110 FORMAT(i5,2i10,3G14.5)
+END SUBROUTINE monres
+
 
 !> Prepare storage for vectors and matrices.
 !!
@@ -5006,6 +5641,7 @@ SUBROUTINE vmprep(msize)
 
     IMPLICIT NONE
     INTEGER(mpi) :: i
+    INTEGER(mpi) :: ncon
                          !
     INTEGER(mpl), INTENT(IN) :: msize(2)
 
@@ -5015,6 +5651,7 @@ SUBROUTINE vmprep(msize)
     !                         Vector/matrix storage
     length=nagb*mthrd
     CALL mpalloc(globalVector,length,'rhs vector') ! double precision vector
+    CALL mpalloc(globalCounter,length,'rhs counter') ! integer vector
     lenGlobalVec=nagb
     length=naeqn
     CALL mpalloc(localCorrections,length,'residual vector of one record')
@@ -5040,6 +5677,7 @@ SUBROUTINE vmprep(msize)
         !           variable-width band matrix or diagonal matrix for parameters
         !           followed by rectangular matrix for constraints
         !           followed by symmetric matrix for constraints
+        ncon=nagb-nvgb
         IF(mbandw > 0) THEN               ! variable-width band matrix
             length=nagb
             CALL mpalloc(indPreCond,length,'pointer-array variable-band matrix')
@@ -5052,10 +5690,10 @@ SUBROUTINE vmprep(msize)
             DO i=nvgb+1,nagb                ! reset
                 indPreCond(i)=0
             END DO
-            length=indPreCond(nvgb)+ncgb*nvgb+(ncgb*ncgb+ncgb)/2
+            length=indPreCond(nvgb)+ncon*nvgb+(ncon*ncon+ncon)/2
             CALL mpalloc(matPreCond,length,'variable-band matrix')
         ELSE                               ! default preconditioner
-            length=nvgb+ncgb*nvgb+(ncgb*ncgb+ncgb)/2
+            length=nvgb+ncon*nvgb+(ncon*ncon+ncon)/2
             CALL mpalloc(matPreCond,length,'default preconditioner matrix')
         END IF
     END IF
@@ -5064,62 +5702,108 @@ SUBROUTINE vmprep(msize)
     length=nagb
     CALL mpalloc(globalCorrections,length,'corrections')      ! double prec corrections
 
+    CALL mpalloc(workspaceD,length,'auxiliary array (D1)')  ! double aux 1
     CALL mpalloc(workspaceLinesearch,length,'auxiliary array (D2)')  ! double aux 2
     CALL mpalloc(workspaceI, length,'auxiliary array (I)')   ! int aux 1
 
     IF(metsol == 1) THEN
-        CALL mpalloc(workspaceD,length,'auxiliary array (D1)')  ! double aux 1
+        CALL mpalloc(workspaceDiag,length,'diagonal of global matrix)')  ! double aux 1
     !         CALL MEGARR('t D',2*NAGB,'auxiliary array')  ! double aux 8
     END IF
 
     IF(metsol == 2) THEN
-        CALL mpalloc(workspaceD,length,'auxiliary array (D1)')  ! double aux 1
+        CALL mpalloc(workspaceDiag,length,'diagonal of global matrix')  ! double aux 1
         CALL mpalloc(workspaceDiagonalization,length,'auxiliary array (D3)')  ! double aux 3
         CALL mpalloc(workspaceEigenValues,length,'auxiliary array (D6)')  ! double aux 6
         length=nagb*nagb
         CALL mpalloc(workspaceEigenVectors,length,'(rotation) matrix U')   ! rotation matrix
     END IF
 
+    IF(metsol >= 3) THEN
+        CALL mpalloc(vecXav,length,'vector X (AVPROD)')  ! double aux 1
+        CALL mpalloc(vecBav,length,'vector B (AVPROD)')  ! double aux 1
+    END IF
+
 END SUBROUTINE vmprep
 
 !> Solution by matrix inversion.
 !!
-!! Parallelized (SQMINL).
+!! Parallelized (SQMINL), solve A*x=b.
 
 SUBROUTINE minver
     USE mpmod
 
     IMPLICIT NONE
+    INTEGER(mpi) :: i
+    INTEGER(mpl) :: ioff1
+    INTEGER(mpi) :: j
     INTEGER(mpi) :: lun
     INTEGER(mpi) :: nrank
+    INTEGER(mpl) :: ii
+    EXTERNAL avprd0
 
     SAVE
     !     ...
     lun=lunlog                       ! log file
     IF(lunlog == 0) lunlog=6
 
-    !      WRITE(*,*) 'MINVER ICALCM=',ICALCM
+    ! save diagonal (for global correlation)
     IF(icalcm == 1) THEN
-        CALL sqminl(globalMatD, globalCorrections,nagb,nrank,  &
+        DO i=1,nagb 
+            ii=i
+            workspaceDiag(i)=globalMatD((ii*ii+ii)/2) ! save diagonal elements
+        END DO
+    ENDIF
+
+    !      WRITE(*,*) 'MINVER ICALCM=',ICALCM
+    !use elimination for constraints ?
+    IF(nfgb < nvgb) THEN
+        IF(icalcm == 1) CALL qlssq(avprd0,globalMatD,.true.) ! Q^t*A*Q
+        ! solve L^t*y=d by backward substitution
+        CALL qlbsub(vecConsResiduals,vecConsSolution)
+        ! transform, reduce rhs
+        CALL qlmlq(globalCorrections,1,.true.) ! Q^t*b
+        ! correction from eliminated part
+        DO i=1,nfgb
+            ioff1=((nfgb+1)*nfgb)/2+i
+            DO j=1,ncgb
+                globalCorrections(i)=globalCorrections(i)-globalMatD(ioff1)*vecConsSolution(j)
+                ioff1=ioff1+nfgb+j
+            END DO
+        END DO
+    END IF
+
+    IF(icalcm == 1) THEN
+        ! invert and solve
+        CALL sqminl(globalMatD, globalCorrections,nfgb,nrank,  &
             workspaceD,workspaceI)
-        ndefec=nagb-nrank   ! rank defect
-        IF(ndefec /= 0) THEN
+        IF(nfgb /= nrank) THEN
             WRITE(*,*)   'Warning: the rank defect of the symmetric',nagb,  &
-                '-by-',nagb,' matrix is ',ndefec,' (should be zero).'
+                '-by-',nagb,' matrix is ',nagb-nrank,' (should be zero).'
             WRITE(lun,*) 'Warning: the rank defect of the symmetric',nagb,  &
-                '-by-',nagb,' matrix is ',ndefec,' (should be zero).'
-            IF (iforce == 0) THEN
+                '-by-',nagb,' matrix is ',nagb-nrank,' (should be zero).'
+            IF (iforce == 0 .AND. isubit == 0) THEN
                 isubit=1
                 WRITE(*,*)   '         --> enforcing SUBITO mode'
                 WRITE(lun,*) '         --> enforcing SUBITO mode'
             END IF
-        ELSE
+        ELSE IF(ndefec == 0) THEN
             WRITE(lun,*) 'No rank defect of the symmetric matrix'
         END IF
-  
+        ndefec=max(nfgb-nrank, ndefec)   ! rank defect
+
     ELSE             ! multiply gradient by inverse matrix
-        CALL dbsvxl(globalMatD,globalVector,globalCorrections,nagb)
+        workspaceD(:nfgb)=globalCorrections(:nfgb)
+        CALL dbsvxl(globalMatD,workspaceD,globalCorrections,nfgb)
     END IF
+
+    !use elimination for constraints ?
+    IF(nfgb < nvgb) THEN  
+        ! extend, transform back solution
+        globalCorrections(nfgb+1:nvgb)=vecConsSolution(1:ncgb)
+        CALL qlmlq(globalCorrections,1,.false.) ! Q*x
+    END IF
+
 END SUBROUTINE minver
 
 !> Solution by diagonalization.
@@ -5132,28 +5816,51 @@ SUBROUTINE mdiags
     INTEGER(mpi) :: iast
     INTEGER(mpi) :: idia
     INTEGER(mpi) :: imin
+    INTEGER(mpl) :: ioff1
+    INTEGER(mpi) :: j
     INTEGER(mpi) :: lun
     INTEGER(mpi) :: nmax
     INTEGER(mpi) :: nmin
     INTEGER(mpi) :: ntop
-    INTEGER(mpi) :: nvar
                                        !
     INTEGER(mpl) :: ii
+    EXTERNAL avprd0
+
     SAVE
     !     ...
 
     lun=lunlog                       ! log file
     IF(lunlog == 0) lun=6
 
+    ! save diagonal (for global correlation)
     IF(icalcm == 1) THEN
-        nvar=nagb
-        DO i=1,nvar      ! used in FEASIB
+        DO i=1,nagb 
             ii=i
-            workspaceD(i)=globalMatD((ii*ii+ii)/2) ! save diagonal elements
+            workspaceDiag(i)=globalMatD((ii*ii+ii)/2) ! save diagonal elements
         END DO
-  
+    ENDIF
+
+    !use elimination for constraints ?
+    IF(nfgb < nvgb) THEN
+        IF(icalcm == 1) CALL qlssq(avprd0,globalMatD,.true.) ! Q^t*A*Q
+        ! solve L^t*y=d by backward substitution
+        CALL qlbsub(vecConsResiduals,vecConsSolution)
+        ! transform, reduce rhs
+        CALL qlmlq(globalCorrections,1,.true.) ! Q^t*b
+        ! correction from eliminated part
+        DO i=1,nfgb
+            ioff1=((nfgb+1)*nfgb)/2+i
+            DO j=1,ncgb
+                globalCorrections(i)=globalCorrections(i)-globalMatD(ioff1)*vecConsSolution(j)
+                ioff1=ioff1+nfgb+j
+            END DO
+        END DO
+    END IF
+
+    IF(icalcm == 1) THEN
         !                         eigenvalues   eigenvectors   symm_input
-        CALL devrot(nvar,workspaceEigenValues,workspaceEigenVectors,globalMatD,  &
+        workspaceEigenValues=0.0_mpd
+        CALL devrot(nfgb,workspaceEigenValues,workspaceEigenVectors,globalMatD,  &
             workspaceDiagonalization,workspaceI)
   
         !        histogram of positive eigenvalues
@@ -5191,7 +5898,7 @@ SUBROUTINE mdiags
         IF(nhistp /= 0) CALL gmprnt(3)
         CALL gmpwrt(3)
   
-        DO i=1,nvar
+        DO i=1,nfgb
             workspaceDiagonalization(i)=0.0_mpd
             IF(workspaceEigenValues(i) /= 0.0_mpd) THEN
                 workspaceDiagonalization(i)=MAX(0.0_mpd,LOG10(ABS(workspaceEigenValues(i)))+3.0_mpd)
@@ -5205,15 +5912,17 @@ SUBROUTINE mdiags
         WRITE(lun,*) 'The last eigenvalues ... up to',nvgb
         WRITE(lun,102) (workspaceEigenValues(i),i=MAX(1,nvgb-19),nvgb)
         WRITE(lun,*) ' '
-        WRITE(lun,*) 'The eigenvalues from',nvgb+1,' to',nagb
-        WRITE(lun,102) (workspaceEigenValues(i),i=nvgb+1,nagb)
-        WRITE(lun,*) ' '
+        IF(nagb > nvgb) THEN
+            WRITE(lun,*) 'The eigenvalues from',nvgb+1,' to',nagb
+            WRITE(lun,102) (workspaceEigenValues(i),i=nvgb+1,nagb)
+            WRITE(lun,*) ' '
+        ENDIF
         WRITE(lun,*) 'Log10 + 3 of ',nagb,' eigenvalues in decreasing', ' order'
         WRITE(lun,*) '(for Eigenvalue < 0.001 the value 0.0 is shown)'
         WRITE(lun,101) (workspaceDiagonalization(i),i=1,nagb)
-        IF(workspaceDiagonalization(nvar) < 0) WRITE(lun,*) 'Negative values are ',  &
+        IF(workspaceDiagonalization(nfgb) < 0) WRITE(lun,*) 'Negative values are ',  &
             'printed for negative eigenvalues'
-        CALL devsig(nagb,workspaceEigenValues,workspaceEigenVectors,globalVector,workspaceDiagonalization)
+        CALL devsig(nfgb,workspaceEigenValues,workspaceEigenVectors,globalVector,workspaceDiagonalization)
         WRITE(lun,*) ' '
         WRITE(lun,*) nvgb,' significances: insignificant if ',  &
             'compatible with  N(0,1)'
@@ -5226,19 +5935,48 @@ SUBROUTINE mdiags
     END IF
 
     !     solution ---------------------------------------------------------
-
+    workspaceD(:nfgb)=globalCorrections(:nfgb)
     !                      eigenvalues   eigenvectors
-    CALL devsol(nvar,workspaceEigenValues,workspaceEigenVectors,globalVector,globalCorrections,workspaceDiagonalization)
-    RETURN
+    CALL devsol(nfgb,workspaceEigenValues,workspaceEigenVectors,workspaceD,globalCorrections,workspaceDiagonalization)
+
+    !use elimination for constraints ?
+    IF(nfgb < nvgb) THEN  
+        ! extend, transform back solution
+        globalCorrections(nfgb+1:nvgb)=vecConsSolution(1:ncgb)
+        CALL qlmlq(globalCorrections,1,.false.) ! Q*x
+    END IF
+
 END SUBROUTINE mdiags
 
-!> Covariance matrix for diagonalization.
+!> Covariance matrix for diagonalization (,correction of eigenvectors).
 SUBROUTINE zdiags
     USE mpmod
 
     IMPLICIT NONE
+    INTEGER(mpi) :: i
+    INTEGER(mpl) :: ioff1
+    INTEGER(mpl) :: ioff2
+    INTEGER(mpi) :: j
+
     !                      eigenvalue    eigenvectors  cov.matrix
-    CALL devinv(nagb,workspaceEigenValues,workspaceEigenVectors,globalMatD)  ! inv
+    CALL devinv(nfgb,workspaceEigenValues,workspaceEigenVectors,globalMatD)  ! inv
+
+    !use elimination for constraints ?
+    IF(nfgb < nvgb) THEN  
+        ! extend, transform eigenvectors
+        ioff1=nfgb*nfgb
+        ioff2=nfgb*nvgb
+        workspaceEigenVectors(ioff2+1:)=0.0_mpd
+        DO i=nfgb,1,-1
+            ioff1=ioff1-nfgb
+            ioff2=ioff2-nvgb
+            DO j=nfgb,1,-1
+                workspaceEigenVectors(ioff2+j)=workspaceEigenVectors(ioff1+j)
+            END DO
+            workspaceEigenVectors(ioff2+nfgb+1:ioff2+nvgb)=0.0_mpd
+        END DO
+        CALL qlmlq(workspaceEigenVectors,nvgb,.false.) ! Q*U
+    END IF
 
 END SUBROUTINE zdiags
 
@@ -5269,7 +6007,7 @@ SUBROUTINE mminrs
     REAL(mpd) :: rnorm
     REAL(mpd) :: ynorm
     LOGICAL :: checka
-    EXTERNAL avprod, mvsolv, mcsolv
+    EXTERNAL avprd0, avprod, mvsolv, mcsolv
     SAVE
     !     ...
     lun=lunlog                       ! log file
@@ -5281,26 +6019,52 @@ SUBROUTINE mminrs
     rtol = mrestl ! from steering
     checka=.FALSE.
 
+    workspaceD = globalCorrections
+    !use elimination for constraints ?
+    IF(nfgb < nvgb) THEN
+        ! solve L^t*y=d by backward substitution
+        CALL qlbsub(vecConsResiduals,vecConsSolution)
+        ! input to AVPRD0
+        vecXav(1:nfgb)=0.0_mpd
+        vecXav(nfgb+1:nagb)=vecConsSolution
+        CALL qlmlq(vecXav,1,.false.) ! Q*x
+        ! calclulate vecBav=globalMat*vecXav
+        CALL AVPRD0(nagb,vecXav,vecBav)
+        ! correction from eliminated part
+        workspaceD=workspaceD-vecBav
+        ! transform, reduce rhs
+        CALL qlmlq(workspaceD,1,.true.) ! Q^t*b
+    END IF
+
     IF(mbandw == 0) THEN           ! default preconditioner
         IF(icalcm == 1) THEN
-            CALL precon(ncgb,nvgb,matPreCond,matPreCond, matPreCond(1+nvgb),  &
-                matPreCond(1+nvgb+ncgb*nvgb))
+            IF(nfgb < nvgb) CALL qlpssq(avprd0,matPreCond,1,.true.) ! transform preconditioner matrix
+            CALL precon(nprecond(1),nprecond(2),matPreCond,matPreCond, matPreCond(1+nvgb),  &
+                matPreCond(1+nvgb+ncgb*nvgb),nrkd)
         END IF
-        CALL minres(nagb,  avprod, mcsolv, globalVector, shift, checka ,.TRUE. , &
+        CALL minres(nfgb,  avprod, mcsolv, workspaceD, shift, checka ,.TRUE. , &
             globalCorrections, itnlim, nout, rtol, istop, itn, anorm, acond, rnorm, arnorm, ynorm)
     ELSE IF(mbandw > 0) THEN                          ! band matrix preconditioner
         IF(icalcm == 1) THEN
-            WRITE(lun,*) 'MMINRS: EQUDEC started'
-            CALL equdec(nvgb,ncgb,matPreCond,indPreCond,nrkd,nrkd2)
-            WRITE(lun,*) 'MMINRS: EQUDEC ended'
+            IF(nfgb < nvgb) CALL qlpssq(avprd0,matPreCond,mbandw,.true.) ! transform preconditioner matrix
+            WRITE(lun,*) 'MMINRS: EQUDEC started', nprecond(2), nprecond(1)
+            CALL equdec(nprecond(2),nprecond(1),lprecm,matPreCond,indPreCond,nrkd,nrkd2)
+            WRITE(lun,*) 'MMINRS: EQUDEC ended  ', nrkd, nrkd2
         END IF
-        CALL minres(nagb,  avprod, mvsolv, globalVector, shift, checka ,.TRUE. , &
+        CALL minres(nfgb,  avprod, mvsolv, workspaceD, shift, checka ,.TRUE. , &
             globalCorrections, itnlim, nout, rtol, istop, itn, anorm, acond, rnorm, arnorm, ynorm)
     ELSE
-
-        CALL minres(nagb,  avprod, mvsolv, globalVector, shift, checka ,.FALSE. , &
+        CALL minres(nfgb,  avprod, mvsolv, workspaceD, shift, checka ,.FALSE. , &
             globalCorrections, itnlim, nout, rtol, istop, itn, anorm, acond, rnorm, arnorm, ynorm)
     END IF
+
+    !use elimination for constraints ?
+    IF(nfgb < nvgb) THEN  
+        ! extend, transform back solution
+        globalCorrections(nfgb+1:nvgb)=vecConsSolution(1:ncgb)
+        CALL qlmlq(globalCorrections,1,.false.) ! Q*x
+    END IF
+
     iitera=itn
     istopa=istop
     mnrsit=mnrsit+itn
@@ -5332,7 +6096,7 @@ SUBROUTINE mminrsqlp
     REAL(mpd) :: mxxnrm
     REAL(mpd) :: trcond
 
-    EXTERNAL avprod, mvsolv, mcsolv
+    EXTERNAL avprd0, avprod, mvsolv, mcsolv
     SAVE
     !     ...
     lun=lunlog                       ! log file
@@ -5350,29 +6114,56 @@ SUBROUTINE mminrsqlp
         trcond = mrtcnd ! QR followed by QLP
     END IF
 
+    workspaceD = globalCorrections
+    !use elimination for constraints ?
+    IF(nfgb < nvgb) THEN
+        ! solve L^t*y=d by backward substitution
+        CALL qlbsub(vecConsResiduals,vecConsSolution)
+        ! input to AVPRD0
+        vecXav(1:nfgb)=0.0_mpd
+        vecXav(nfgb+1:nagb)=vecConsSolution
+        CALL qlmlq(vecXav,1,.false.) ! Q*x
+        ! calclulate vecBav=globalMat*vecXav
+        CALL AVPRD0(nagb,vecXav,vecBav)
+        ! correction from eliminated part
+        workspaceD=workspaceD-vecBav
+        ! transform, reduce rhs
+        CALL qlmlq(workspaceD,1,.true.) ! Q^t*b
+    END IF
+
     IF(mbandw == 0) THEN           ! default preconditioner
         IF(icalcm == 1) THEN
-            CALL precon(ncgb,nvgb,matPreCond,matPreCond, matPreCond(1+nvgb),  &
-                matPreCond(1+nvgb+ncgb*nvgb))
+            IF(nfgb < nvgb) CALL qlpssq(avprd0,matPreCond,1,.true.) ! transform preconditioner matrix
+            CALL precon(nprecond(1),nprecond(2),matPreCond,matPreCond, matPreCond(1+nvgb),  &
+                matPreCond(1+nvgb+ncgb*nvgb),nrkd)
         END IF
-        CALL minresqlp( n=nagb, Aprod=avprod, b=globalVector,  Msolve=mcsolv, nout=nout, &
+        CALL minresqlp( n=nfgb, Aprod=avprod, b=workspaceD,  Msolve=mcsolv, nout=nout, &
             itnlim=itnlim, rtol=rtol, maxxnorm=mxxnrm, trancond=trcond, &
             x=globalCorrections, istop=istop, itn=itn)
     ELSE IF(mbandw > 0) THEN                          ! band matrix preconditioner
         IF(icalcm == 1) THEN
-            WRITE(lun,*) 'MMINRS: EQUDEC started'
-            CALL equdec(nvgb,ncgb,matPreCond,indPreCond,nrkd,nrkd2)
-            WRITE(lun,*) 'MMINRS: EQUDEC ended'
+            IF(nfgb < nvgb) CALL qlpssq(avprd0,matPreCond,mbandw,.true.) ! transform preconditioner matrix
+            WRITE(lun,*) 'MMINRS: EQUDEC started', nprecond(2), nprecond(1)
+            CALL equdec(nprecond(2),nprecond(1),lprecm,matPreCond,indPreCond,nrkd,nrkd2)
+            WRITE(lun,*) 'MMINRS: EQUDEC ended  ', nrkd, nrkd2
         END IF
 
-        CALL minresqlp( n=nagb, Aprod=avprod, b=globalVector,  Msolve=mvsolv, nout=nout, &
+        CALL minresqlp( n=nfgb, Aprod=avprod, b=workspaceD,  Msolve=mvsolv, nout=nout, &
             itnlim=itnlim, rtol=rtol, maxxnorm=mxxnrm, trancond=trcond, &
             x=globalCorrections, istop=istop, itn=itn)
     ELSE
-        CALL minresqlp( n=nagb, Aprod=avprod, b=globalVector, nout=nout, &
+        CALL minresqlp( n=nfgb, Aprod=avprod, b=workspaceD, nout=nout, &
             itnlim=itnlim, rtol=rtol, maxxnorm=mxxnrm, trancond=trcond, &
             x=globalCorrections, istop=istop, itn=itn)
     END IF
+
+    !use elimination for constraints ?
+    IF(nfgb < nvgb) THEN  
+        ! extend, transform back solution
+        globalCorrections(nfgb+1:nvgb)=vecConsSolution(1:ncgb)
+        CALL qlmlq(globalCorrections,1,.false.) ! Q*x
+    END IF
+
     iitera=itn
     istopa=istop
     mnrsit=mnrsit+itn
@@ -5398,7 +6189,7 @@ SUBROUTINE mcsolv(n,x,y)         !  solve M*y = x
     REAL(mpd), INTENT(OUT) :: y(n)
     SAVE
     !     ...
-    CALL presol(ncgb,nvgb,matPreCond,matPreCond(1+nvgb),matPreCond(1+nvgb+ncgb*nvgb),y,x)
+    CALL presol(nprecond(1),nprecond(2),matPreCond,matPreCond(1+nvgb),matPreCond(1+nvgb+ncgb*nvgb),y,x)
 END SUBROUTINE mcsolv
 
 !> Solution for finite band width preconditioner.
@@ -5413,51 +6204,16 @@ SUBROUTINE mvsolv(n,x,y)         !  solve M*y = x
     USE mpmod
 
     IMPLICIT NONE
-    REAL(mps) :: factr
-    INTEGER(mpi) :: i
-    INTEGER(mpi) :: icgb
-    INTEGER(mpi) :: itgbi
-    INTEGER(mpi) :: ivgb
-    INTEGER(mpi) :: label
-    INTEGER(mpi) :: last
-    INTEGER(mpi) :: inone
 
     INTEGER(mpi), INTENT(IN) :: n
     REAL(mpd), INTENT(IN)  :: x(n)
     REAL(mpd), INTENT(OUT) :: y(n)
+    
     SAVE
     !     ...
-    DO i=1,n
-        y(i)=x(i)                    ! copy to output vector
-    END DO
+    y=x                    ! copy to output vector
 
-    DO icgb=1,ncgb                ! copy previous lambda values
-    !       Y(NVGB+ICGB)=DQ(ISOLV/2+NVGB+ICGB)
-    END DO
-
-    i=0
-    icgb=0
-    last=-1
-    DO WHILE(i < lenConstraints)
-        i=i+1
-        label=listConstraints(i)%label
-        IF(last == 0.AND.label == (-1)) icgb=icgb+1 ! next constraint header
-        IF(label > 0) THEN
-            factr=listConstraints(i)%value
-            itgbi=inone(label) ! -> ITGBI= index of parameter label
-            ivgb =globalParLabelIndex(2,itgbi) ! -> variable-parameter index
-            !                   - A^T * lambda
-            IF(ivgb /= 0) THEN
-            !          Y(IVGB)=Y(IVGB) - DQ(ISOLV/2+NVGB+ICGB)*FACTR
-            END IF
-        END IF
-        last=label
-    END DO
-
-    !      CALL VABSLV(NVGB,DQ(INDV/2+1),MQ(INDU+1),Y) ! solve for Y
-    !      CALL VABSLV(NAGB,DQ(INDV/2+1),MQ(INDU+1),Y) ! solve for Y
-
-    CALL equslv(nvgb,ncgb,matPreCond,indPreCond,y)
+    CALL equslv(nprecond(2),nprecond(1),matPreCond,indPreCond,y)
 END SUBROUTINE mvsolv
 
 
@@ -5490,6 +6246,7 @@ SUBROUTINE xloopn                !
     INTEGER(mpi) :: iagain
     INTEGER(mpi) :: idx
     INTEGER(mpi) :: info
+    INTEGER(mpl) :: ioff
     INTEGER(mpi) :: itgbi
     INTEGER(mpi) :: ivgbi
     INTEGER(mpi) :: jcalcm
@@ -5511,16 +6268,20 @@ SUBROUTINE xloopn                !
 
     REAL(mpd) :: stp
     REAL(mpd) :: dratio
-    REAL(mpd) :: dfacin
-    REAL(mpd) :: djrat
     REAL(mpd) :: dwmean
     REAL(mpd) :: db
     REAL(mpd) :: db1
     REAL(mpd) :: db2
     REAL(mpd) :: dbdot
+    LOGICAL :: btest
     LOGICAL :: warner
     LOGICAL :: warners
+    LOGICAL :: warnerss
     LOGICAL :: lsflag
+    CHARACTER (LEN=7) :: cratio
+    CHARACTER (LEN=7) :: cfacin
+    CHARACTER (LEN=7) :: crjrat
+    EXTERNAL avprd0
     SAVE
     !     ...
 
@@ -5572,7 +6333,11 @@ SUBROUTINE xloopn                !
             ELSE IF(mbandw < 0) THEN
                 WRITE(lunp,121) 'pre-conditioning:','none!'
             ELSE IF(mbandw > 0) THEN
-                WRITE(lunp,121) 'pre-conditioning=','band-matrix'
+                IF(lprecm > 0) THEN
+                    WRITE(lunp,121) 'pre-conditioning=','skyline-matrix (rank preserving)'
+                ELSE
+                    WRITE(lunp,121) 'pre-conditioning=','band-matrix'
+                ENDIF
             END IF
         END IF
         IF(regpre == 0.0_mpd.AND.npresg == 0) THEN
@@ -5604,7 +6369,7 @@ SUBROUTINE xloopn                !
   
   
 121     FORMAT(1X,a40,3X,a)
-122     FORMAT(1X,a40,2X,i2,a)
+122     FORMAT(1X,a40,3X,i0,a)
 123     FORMAT(1X,a40,2X,e9.2)
 124     FORMAT(1X,a40,3X,f5.1,a)
     END DO
@@ -5805,9 +6570,10 @@ SUBROUTINE xloopn                !
                 END IF
             ENDIF
 
-            IF(db <= 0.0_mpd) THEN
+            ! change significantly negative ?
+            IF(db <= -16.0_mpd*SQRT(max(db1,db2))*epsilon(db)) THEN
                 WRITE(*,*) 'Function not decreasing:',db
-                IF(db <= -1.0E-3_mpd) THEN ! 100311, VB/CK: allow some margin for numerics
+                IF(db > -1.0E-3_mpd) THEN ! 100311, VB/CK: allow some margin for numerics
                     iagain=iagain+1
                     IF (iagain <= 1) THEN
                         WRITE(*,*) '... again matrix calculation'
@@ -5903,6 +6669,10 @@ SUBROUTINE xloopn                !
             nrejec(0), ' (rank deficit/NaN) ',nrejec(1),' (Ndf=0)   ',  &
             nrejec(2), ' (huge)   ',nrejec(3),' (large)'
     END IF
+    
+    ! monitoring of residuals
+    IF (imonit > 0 .AND. btest(imonit,1)) CALL monres
+    IF (lunmon > 0) CLOSE(UNIT=lunmon)
 
     dwmean=sumndf/REAL(ndfsum,mpd)
     dratio=fvalue/dwmean/REAL(ndfsum-nagb,mpd)
@@ -5952,21 +6722,24 @@ SUBROUTINE xloopn                !
 
 
     nrati=nint(10000.0*REAL(nrej,mps)/REAL(nrecal,mps),mpi)
-    djrat=0.01_mpd*REAL(nrati,mpd)
+    WRITE(crjrat,197) 0.01_mpd*REAL(nrati,mpd)
     nfaci=nint(100.0*SQRT(catio),mpi)
 
-    dratio=0.01_mpd*REAL(mrati,mpd)
-    dfacin=0.01_mpd*REAL(nfaci,mpd)
+    WRITE(cratio,197) 0.01_mpd*REAL(mrati,mpd)
+    WRITE(cfacin,197) 0.01_mpd*REAL(nfaci,mpd)
 
     warner=.FALSE. ! warnings
     IF(mrati < 90.OR.mrati > 110) warner=.TRUE.
     IF(nrati > 100) warner=.TRUE.
+    IF(ncgbe /= 0) warner=.TRUE.
     warners = .FALSE. ! severe warnings
-    IF(nmiss1 /= 0) warners=.TRUE.
-    IF(iagain /= 0) warners=.TRUE.
-    IF(ndefec /= 0) warners=.TRUE.
+    IF(nalow /= 0) warners=.TRUE.
+    warnerss = .FALSE. ! more severe warnings
+    IF(nmiss1 /= 0) warnerss=.TRUE.
+    IF(iagain /= 0) warnerss=.TRUE.
+    IF(ndefec /= 0) warnerss=.TRUE.
 
-    IF(warner.OR.warners) THEN
+    IF(warner.OR.warners.OR.warnerss) THEN
         WRITE(*,199) ' '
         WRITE(*,199) ' '
         WRITE(*,199) 'WarningWarningWarningWarningWarningWarningWarningWarningWar'
@@ -5979,14 +6752,14 @@ SUBROUTINE xloopn                !
 
         IF(mrati < 90.OR.mrati > 110) THEN
             WRITE(*,199) ' '
-            WRITE(*,*) '        Chi^2/Ndf = ',dratio, '  (should be close to 1)'
+            WRITE(*,*) '        Chi^2/Ndf = ',cratio, '  (should be close to 1)'
             WRITE(*,*) '        => multiply all input standard ',  &
-                'deviations by factor',dfacin
+                'deviations by factor',cfacin
         END IF
 
         IF(nrati > 100) THEN
             WRITE(*,199) ' '
-            WRITE(*,*) '        Fraction of rejects =',djrat,' %',  &
+            WRITE(*,*) '        Fraction of rejects =',crjrat,' %',  &
                 '  (should be far below 1 %)'
             WRITE(*,*) '        => please provide correct mille data'
         END IF
@@ -6004,14 +6777,27 @@ SUBROUTINE xloopn                !
                 '  for global matrix, should be 0'
             WRITE(*,*) '        => please provide correct mille data'
         END IF
-
+        
         IF(nmiss1 /= 0) THEN
             WRITE(*,199) ' '
             WRITE(*,*) '        Rank defect =',nmiss1,  &
                 '  for constraint equations, should be 0'
             WRITE(*,*) '        => please correct constraint definition'
         END IF
+                
+        IF(ncgbe /= 0) THEN
+            WRITE(*,199) ' '
+            WRITE(*,*) '        Number of empty constraints =',ncgbe, ', should be 0'
+            WRITE(*,*) '        => please check constraint definition, mille data'
+        END IF
 
+        IF(nalow /= 0) THEN
+            WRITE(*,199) ' '
+            WRITE(*,*) '        Possible rank defects =',nalow,  &
+                '  for global vector (too few entries)'
+            WRITE(*,*) '        => please check mille data and ENTRIES cut'
+        END IF
+        
         WRITE(*,199) ' '
         WRITE(*,199) 'WarningWarningWarningWarningWarningWarningWarningWarningWar'
         WRITE(*,199) 'arningWarningWarningWarningWarningWarningWarningWarningWarn'
@@ -6054,10 +6840,24 @@ SUBROUTINE xloopn                !
   
     END IF
 
+    IF(metsol <= 2) THEN ! inversion or diagonalization ?
+        !use elimination for constraints ?
+        IF(nfgb < nvgb) THEN
+            ! extend, transform matrix
+            DO i=nvgb-ncgb+1,nvgb
+                ioff=((i-1)*i)/2
+                globalMatD(ioff+1:ioff+i)=0.0_mpd
+            END DO
+            CALL qlssq(avprd0,globalMatD,.false.) ! Q^t*A*Q
+        END IF
+    END IF
+
     CALL prtglo              ! print result
 
-    IF (warners) THEN
-        CALL peend(2,'Ended with severe warnings (bad global matrix)')
+    IF (warnerss) THEN
+        CALL peend(3,'Ended with severe warnings (bad global matrix)')
+    ELSE IF (warners) THEN
+        CALL peend(2,'Ended with severe warnings (insufficient measurements)')
     ELSE IF (warner) THEN
         CALL peend(1,'Ended with warnings (bad measurements)')
     ELSE
@@ -6066,6 +6866,7 @@ SUBROUTINE xloopn                !
 
 102 FORMAT(' Call FEASIB with cut=',g10.3)
     ! 103  FORMAT(1X,A,G12.4)
+197 FORMAT(F7.2)    
 199 FORMAT(7X,a)
 END SUBROUTINE xloopn                ! standard solution
 
@@ -6181,6 +6982,7 @@ SUBROUTINE filetc
             END IF
             IF(INDEX(text(ia:ib),'s') /= 0) isubit=1  ! like "subito"
             IF(INDEX(text(ia:ib),'f') /= 0) iforce=1  ! like "force"
+            IF(INDEX(text(ia:ib),'c') /= 0) icheck=1  ! like "checkinput
         END IF
         IF(i == iargc()) WRITE(*,*) '--------------------- '
     END DO
@@ -6482,11 +7284,11 @@ END SUBROUTINE filetc
 !!     ...  ...
 !!     (number of words is multiple of 3)
 !!
-!! Constraint and Wconstrained data, format:
+!! Constraint data, format:
 !!
 !!       1  0                 ! constraint header of four words:
 !!       2  right-hand-side   ! 0 and -1 ...
-!!       3  -1; -2            ! ... indicate ...
+!!       3  -1; -2            ! ... indicate (weighting) ...
 !!       4  sigma             ! ... header
 !!       5  label
 !!       6  factor
@@ -6822,15 +7624,14 @@ SUBROUTINE intext(text,nline)
     CHARACTER (LEN=*), INTENT(IN) :: text
     INTEGER(mpi), INTENT(IN) :: nline
 
-    PARAMETER (nkeys=9,nmeth=6)
+    PARAMETER (nkeys=5,nmeth=6)
     CHARACTER (LEN=16) :: methxt(nmeth)
     CHARACTER (LEN=16) :: keylst(nkeys)
     CHARACTER (LEN=32) :: keywrd
     CHARACTER (LEN=32) :: keystx
     REAL(mpd) :: dnum(100)
-    REAL(mps) :: plvs(3)    ! vector array: real and ...
-    INTEGER(mpi) :: lpvs(3)    ! ... integer
-    EQUIVALENCE (plvs(1),lpvs(1))
+    INTEGER(mpi) :: lpvs    ! ... integer
+    REAL(mpd)    :: plvs    ! ... float
 
     INTERFACE
         SUBROUTINE addItem(length,list,label,value)
@@ -6838,17 +7639,11 @@ SUBROUTINE intext(text,nline)
             INTEGER(mpi), INTENT(IN OUT) :: length
             TYPE(listItem), DIMENSION(:), INTENT(IN OUT), ALLOCATABLE :: list
             INTEGER(mpi), INTENT(IN) :: label
-            REAL(mps), INTENT(IN) :: value
+            REAL(mpd), INTENT(IN) :: value
         END SUBROUTINE addItem
     END INTERFACE
 
-    DATA keylst/'unknown','parameter','constraint','wconstraint',  &
-        'measurement', 'method',  &
-        'mestimate', 'atleast','option'/
-
-    !add  number of iterations
-    !     wconstraint like constraint
-    !     measured   r sigma label factor ...(more)
+    DATA keylst/'unknown','parameter','constraint','measurement','method'/
 
     SAVE
     DATA methxt/'diagonalization','inversion','fullMINRES', 'sparseMINRES', &
@@ -6868,7 +7663,7 @@ SUBROUTINE intext(text,nline)
   
         !        compare keywords
   
-        DO nkey=2,nkeys-1         ! loop over all pede keywords
+        DO nkey=2,nkeys           ! loop over all pede keywords
             keystx=keylst(nkey)   ! copy NKEY.th pede keyword
             mat=matint(text(keya:keyb),keystx,npat,ntext) ! comparison
             IF(mat >= ntext-ntext/5) GO TO 10
@@ -6902,9 +7697,9 @@ SUBROUTINE intext(text,nline)
         mat=matint(text(keya:keyb),keystx,npat,ntext) ! comparison
         IF(mat >= (npat-npat/5)) THEN
             !         IF(MAT.GE.(NTEXT+NTEXT+3)/3) THEN
-            mreqen=0
-            IF(nums > 0) mreqen=NINT(dnum(1),mpi)
-            IF (mreqen <= 0) mreqen=1
+            IF(nums > 0 .AND. dnum(1) > 0.5) mreqenf=NINT(dnum(1),mpi)
+            IF(nums > 1 .AND. dnum(2) > 0.5) mreqena=NINT(dnum(2),mpi)
+            IF(nums > 2 .AND. dnum(3) > 0.5) iteren=NINT(dnum(1)*dnum(3),mpi)
             RETURN
         END IF
 
@@ -7028,6 +7823,7 @@ SUBROUTINE intext(text,nline)
         IF(mat >= (npat-npat/5)) THEN
             IF(nums > 0)   mbandw=NINT(dnum(1),mpi)
             IF(mbandw < 0) mbandw=-1
+            IF(nums > 1)   lprecm=NINT(dnum(2),mpi)
             RETURN
         END IF
   
@@ -7104,7 +7900,68 @@ SUBROUTINE intext(text,nline)
             igcorr=1
             RETURN
         END IF
-  
+
+        keystx='printcounts'
+        mat=matint(text(keya:keyb),keystx,npat,ntext) ! comparison
+        IF(mat >= (npat-npat/5)) THEN
+            ipcntr=1
+            IF (nums > 0.AND.dnum(1) > 0.0) ipcntr=NINT(dnum(1),mpi)
+            RETURN
+        END IF
+
+        keystx='weightedcons'
+        mat=matint(text(keya:keyb),keystx,npat,ntext) ! comparison
+        IF(mat >= (npat-npat/5)) THEN
+            iwcons=1
+            IF (nums > 0) iwcons=NINT(dnum(1),mpi)
+            RETURN
+        END IF
+
+        keystx='skipemptycons'
+        mat=matint(text(keya:keyb),keystx,npat,ntext) ! comparison
+        IF(mat >= (npat-npat/5)) THEN
+            iskpec=1
+            RETURN
+        END IF
+
+        keystx='withelimination'
+        mat=matint(text(keya:keyb),keystx,npat,ntext) ! comparison
+        IF(mat >= (npat-npat/5)) THEN
+            icelim=1
+            RETURN
+        END IF
+
+        keystx='withmultipliers'
+        mat=matint(text(keya:keyb),keystx,npat,ntext) ! comparison
+        IF(mat >= (npat-npat/5)) THEN
+            icelim=0
+            RETURN
+        END IF
+
+        keystx='checkinput'
+        mat=matint(text(keya:keyb),keystx,npat,ntext) ! comparison
+        IF(mat >= (npat-npat/5)) THEN
+            icheck=1
+            RETURN
+        END IF
+
+        keystx='monitorresiduals'
+        mat=matint(text(keya:keyb),keystx,npat,ntext) ! comparison
+        IF(mat >= (npat-npat/5)) THEN
+            imonit=3
+            IF (nums > 0) imonit=NINT(dnum(1),mpi)
+            IF (nums > 1) measBins=max(measBins,NINT(dnum(2),mpi))
+            RETURN
+        END IF
+        
+        keystx='iterateentries'
+        mat=matint(text(keya:keyb),keystx,npat,ntext) ! comparison
+        IF(mat >= (npat-npat/5)) THEN
+            iteren=huge(iteren)
+            IF (nums > 0) iteren=NINT(dnum(1),mpi)
+            RETURN
+        END IF
+
         keystx='threads'
         mat=matint(text(keya:keyb),keystx,npat,ntext) ! comparison
         IF(mat >= (npat-npat/5)) THEN
@@ -7256,24 +8113,20 @@ SUBROUTINE intext(text,nline)
     !      unknown          1
     !      parameter        2
     !      constraint       3
-    !      method           4
-    !      atleast          5
-    !      option           6
-    !      cut              7
+    !      measurement      4 
+    !      method           5
+
 
 10  IF(nkey > 0) THEN     ! new keyword
         lkey=nkey
-        IF(lkey == 2) THEN                                 ! parameter
+        IF(lkey == 2) THEN              ! parameter
             IF(nums == 3) THEN
-                lpvs(1)=NINT(dnum(1),mpi) ! label
-                plvs(2)=REAL(dnum(2),mps)   ! start value
-                plvs(3)=REAL(dnum(3),mps)   ! pre-sigma
-                IF(lpvs(1) /= 0) THEN
-                    !                   CALL megvec('7',plvs,3,0)      ! always 3 words
-                    CALL addItem(lenParameters,listParameters,lpvs(1),plvs(2))
-                    CALL addItem(lenPreSigmas,listPresigmas,lpvs(1),plvs(3))
+                lpvs=NINT(dnum(1),mpi)  ! label
+                IF(lpvs /= 0) THEN
+                    CALL addItem(lenParameters,listParameters,lpvs,dnum(2)) ! start value
+                    CALL addItem(lenPreSigmas,listPresigmas,lpvs,dnum(3))   ! pre-sigma
                 ELSE
-                    WRITE(*,*) 'Line',nline,' error, label=',lpvs(1)
+                    WRITE(*,*) 'Line',nline,' error, label=',lpvs
                 END IF
             ELSE IF(nums /= 0) THEN
                 kkey=1   ! switch to "unknown"  ?
@@ -7281,39 +8134,28 @@ SUBROUTINE intext(text,nline)
                 WRITE(*,*) 'Status: new parameter'
                 WRITE(*,*) '> ',text(1:nab)
             END IF
-        ELSE IF(lkey == 3.OR.lkey == 4) THEN               ! constraint
+        ELSE IF(lkey == 3) THEN         ! constraint
             !            WRITE(*,*) 'Keyword is constraint!',NUMS,' numerical data'
             IF(nums >= 1.AND.nums <= 2) THEN ! start constraint
-                !               WRITE(*,*) 'NUMs is ',NUMS
-                lpvs(1)=0
-                plvs(2)=REAL(dnum(1),mps)         ! r = r.h.s. value
-                !               CALL megvec('8',plvs,2,0)
-                CALL addItem(lenConstraints,listConstraints,lpvs(1),plvs(2))
-                !               WRITE(*,*) 'LPVS PLVS ',LPVS,PLVS
-                lpvs(1)=-1                    ! constraint
-                IF(lkey == 4) lpvs(1)=-2      ! wconstraint (weighted)
-                plvs(2)=0.0
-                !               WRITE(*,*) 'LPVS PLVS ',LPVS,PLVS
-                IF(nums == 2) plvs(2)=REAL(dnum(2),mps) ! sigma
-                !               CALL megvec('8',plvs,2,0)
-                CALL addItem(lenConstraints,listConstraints,lpvs(1),plvs(2))
-            !               WRITE(*,*) 'LPVS PLVS ',LPVS,PLVS
+                lpvs=0   ! r = r.h.s. value
+                CALL addItem(lenConstraints,listConstraints,lpvs,dnum(1))
+                lpvs=-1                    ! constraint
+                IF(iwcons > 0) lpvs=-2     ! weighted constraint 
+                plvs=0.0
+                IF(nums == 2) plvs=dnum(2) ! sigma
+                CALL addItem(lenConstraints,listConstraints,lpvs,plvs)
             ELSE
                 kkey=1   ! switch to "unknown"
                 WRITE(*,*) 'Wrong text in line',nline
-                WRITE(*,*) 'Status: new keyword (w)constraint'
+                WRITE(*,*) 'Status: new keyword constraint'
                 WRITE(*,*) '> ',text(1:nab)
             END IF
-        ELSE IF(lkey == 5) THEN                           ! measurement
+        ELSE IF(lkey == 4) THEN         ! measurement
             IF(nums == 2) THEN ! start measurement
-                lpvs(1)=0
-                plvs(2)=REAL(dnum(1),mps)         ! r = r.h.s. value
-                !               CALL megvec('9',plvs,2,0)
-                CALL addItem(lenMeasurements,listMeasurements,lpvs(1),plvs(2))
-                lpvs(1)=-1                    ! constraint
-                plvs(2)=REAL(dnum(2),mps)         ! sigma
-                !               CALL megvec('9',plvs,2,0)
-                CALL addItem(lenMeasurements,listMeasurements,lpvs(1),plvs(2))
+                lpvs=0   ! r = r.h.s. value
+                CALL addItem(lenMeasurements,listMeasurements,lpvs,dnum(1))
+                lpvs=-1  ! sigma
+                CALL addItem(lenMeasurements,listMeasurements,lpvs,dnum(2))
             ELSE
                 kkey=1   ! switch to "unknown"
                 WRITE(*,*) 'Wrong text in line',nline
@@ -7321,7 +8163,7 @@ SUBROUTINE intext(text,nline)
                 WRITE(*,*) '> ',text(1:nab)
             END IF
     
-        ELSE IF(lkey == 6) THEN                                ! method
+        ELSE IF(lkey == 5) THEN         ! method
             miter=mitera
             IF(nums >= 1) miter=NINT(dnum(1),mpi)
             IF(miter >= 1) mitera=miter
@@ -7354,17 +8196,14 @@ SUBROUTINE intext(text,nline)
             END DO
         END IF
     ELSE IF(nkey == 0) THEN  ! data for continuation
-        IF(lkey == 2) THEN                                  ! parameter
+        IF(lkey == 2) THEN              ! parameter
             IF(nums >= 3) THEN   ! store data from this line
-                lpvs(1)=NINT(dnum(1),mpi) ! label
-                plvs(2)=REAL(dnum(2),mps)   ! start value
-                plvs(3)=REAL(dnum(3),mps)   ! pre-sigma
-                IF(lpvs(1) /= 0) THEN
-                    !                   CALL megvec('7',plvs,3,0)      ! always 3 words
-                    CALL addItem(lenParameters,listParameters,lpvs(1),plvs(2))
-                    CALL addItem(lenPreSigmas,listPresigmas,lpvs(1),plvs(3))
+                lpvs=NINT(dnum(1),mpi) ! label
+                IF(lpvs /= 0) THEN
+                    CALL addItem(lenParameters,listParameters,lpvs,dnum(2))  ! start value
+                    CALL addItem(lenPreSigmas,listPresigmas,lpvs,dnum(3))    ! pre-sigma
                 ELSE
-                    WRITE(*,*) 'Line',nline,' error, label=',lpvs(1)
+                    WRITE(*,*) 'Line',nline,' error, label=',lpvs
                 END IF
             ELSE IF(nums > 1.AND.nums < 3) THEN
                 kkey=1   ! switch to "unknown"  ?
@@ -7373,7 +8212,7 @@ SUBROUTINE intext(text,nline)
                 WRITE(*,*) '> ',text(1:nab)
             END IF
     
-        ELSE IF(lkey == 3.OR.lkey == 4) THEN            ! (w)constraint
+        ELSE IF(lkey == 3) THEN         ! constraint
             ier=0
             DO i=1,nums,2
                 label=NINT(dnum(i),mpi)
@@ -7382,19 +8221,18 @@ SUBROUTINE intext(text,nline)
             IF(MOD(nums,2) /= 0) ier=1 ! reject odd number
             IF(ier == 0) THEN
                 DO i=1,nums,2
-                    lpvs(1)=NINT(dnum(i),mpi) ! label
-                    plvs(2)=REAL(dnum(i+1),mps) ! factor
-                    !                   CALL megvec('8',plvs,2,0)
-                    CALL addItem(lenConstraints,listConstraints,lpvs(1),plvs(2))
+                    lpvs=NINT(dnum(i),mpi) ! label
+                    plvs=dnum(i+1)         ! factor
+                    CALL addItem(lenConstraints,listConstraints,lpvs,plvs)
                 END DO
             ELSE
                 kkey=0
                 WRITE(*,*) 'Wrong text in line',nline
-                WRITE(*,*) 'Status continuation (w)constraint'
+                WRITE(*,*) 'Status continuation constraint'
                 WRITE(*,*) '> ',text(1:nab)
             END IF
     
-        ELSE IF(lkey == 5) THEN                           ! measurement
+        ELSE IF(lkey == 4) THEN         ! measurement
             !            WRITE(*,*) 'continuation                          < ',NUMS
             ier=0
             DO i=1,nums,2
@@ -7405,10 +8243,9 @@ SUBROUTINE intext(text,nline)
             !            WRITE(*,*) 'IER NUMS ',IER,NUMS
             IF(ier == 0) THEN
                 DO i=1,nums,2
-                    lpvs(1)=NINT(dnum(i),mpi) ! label
-                    plvs(2)=REAL(dnum(i+1),mps) ! factor
-                    !                   CALL megvec('9',plvs,2,0)
-                    CALL addItem(lenMeasurements,listMeasurements,lpvs(1),plvs(2))
+                    lpvs=NINT(dnum(i),mpi) ! label
+                    plvs=dnum(i+1)         ! factor
+                    CALL addItem(lenMeasurements,listMeasurements,lpvs,plvs)
                 END DO
             ELSE
                 kkey=0
@@ -7435,7 +8272,7 @@ SUBROUTINE addItem(length,list,label,value)
     INTEGER(mpi), INTENT(IN OUT) :: length
     TYPE(listItem), DIMENSION(:), INTENT(IN OUT), ALLOCATABLE :: list
     INTEGER(mpi), INTENT(IN) :: label
-    REAL(mps), INTENT(IN) :: value
+    REAL(mpd), INTENT(IN) :: value
 
     INTEGER(mpl) :: newSize
     INTEGER(mpl) :: oldSize

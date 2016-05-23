@@ -1,5 +1,24 @@
 !> \file
 !! Data structures.
+!!
+!! \author Claus Kleinwort, DESY, 2012 (Claus.Kleinwort@desy.de)
+!!
+!! \copyright
+!! Copyright (c) 2012 - 2015 Deutsches Elektronen-Synchroton,
+!! Member of the Helmholtz Association, (DESY), HAMBURG, GERMANY \n\n
+!! This library is free software; you can redistribute it and/or modify
+!! it under the terms of the GNU Library General Public License as
+!! published by the Free Software Foundation; either version 2 of the
+!! License, or (at your option) any later version. \n\n
+!! This library is distributed in the hope that it will be useful,
+!! but WITHOUT ANY WARRANTY; without even the implied warranty of
+!! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+!! GNU Library General Public License for more details. \n\n
+!! You should have received a copy of the GNU Library General Public
+!! License along with this program (see the file COPYING.LIB for more
+!! details); if not, write to the Free Software Foundation, Inc.,
+!! 675 Mass Ave, Cambridge, MA 02139, USA.
+!!
 
 !> Parameters, variables, dynamic arrays.
 !!
@@ -17,10 +36,12 @@ MODULE mpmod
     INTEGER(mpi) :: mprint=1  !< print flag (0: minimal, 1: normal, >1: more)
     INTEGER(mpi) :: mdebug=0  !< debug flag (number of records to print)
     INTEGER(mpi) :: mdebg2=10 !< number of measurements for record debug printout
-    INTEGER(mpi) :: mreqen=10 !< required number of entries (for variable global parameter)
+    INTEGER(mpi) :: mreqenf=25 !< required number of entries (for variable global parameter from binary Files)
+    INTEGER(mpi) :: mreqena=10 !< required number of entries (for variable global parameter from Accepted local fits)
     INTEGER(mpi) :: mitera=1  !< number of iterations
     INTEGER(mpi) :: nloopn=0  !< number of data reading, fitting loops
     INTEGER(mpi) :: mbandw=0  !< band width of preconditioner matrix
+    INTEGER(mpi) :: lprecm=0  !< additional flag for preconditioner (band) matrix (>0: preserve rank by skyline matrix)
     INTEGER(mpi) :: lunkno=0  !< flag for unkown keywords
     INTEGER(mpi) :: lhuber=0  !< Huber down-weighting flag
     REAL(mps)    :: chicut=0.0  !< cut in terms of 3-sigma cut, first iteration
@@ -58,7 +79,7 @@ MODULE mpmod
     INTEGER(mpi) :: nrec3 = huge(nrec3) !< (1.) record number with error
     INTEGER(mpi) :: mreqpe=1  !< min number of pair entries
     INTEGER(mpi) :: mhispe=0  !< upper bound for pair entry histogrammimg
-    INTEGER(mpi) :: msngpe=0  !< upper bound for pair entry single precision storage
+    INTEGER(mpi) :: msngpe=-1 !< upper bound for pair entry single precision storage
     INTEGER(mpi) :: mcmprs=0  !< compression flag for sparsity (column indices)
     INTEGER(mpi) :: mthrd =1  !< number of (OpenMP) threads
     INTEGER(mpi) :: mxrec =0  !< max number of records
@@ -76,17 +97,31 @@ MODULE mpmod
     REAL(mps)    :: prange=0.0!< range (-PRANGE..PRANGE) for histograms of pulls, norm. residuals
     INTEGER(mpi) :: lsearch=2 !< iterations (solutions) with line search:
                          !! >2: all, =2: all with (next) Chi2 cut scaling factor =1., =1: last, <1: none
+    INTEGER(mpi) :: ipcntr=0  !< flag for output of global parameter counts (entries), =0: none, =1: local fits, >1: binary files
+    INTEGER(mpi) :: iwcons=0  !< flag for weighting of constraints (>0: weighting with \ref globalparcounts "globalParCounts", else: none)
+    INTEGER(mpi) :: icelim=1  !< flag for using elimination (instead of multipliers) for constraints
+    INTEGER(mpi) :: icheck=0  !< flag for checking input only (no solution determined)
+    INTEGER(mpi) :: iteren=0  !< entries cut is iterated for parameters with less entries (if > \ref mreqenf)
+    INTEGER(mpi) :: iskpec=0  !< flag for skipping empty constraints (no variable parameters)
+    INTEGER(mpi) :: imonit=0  !< flag for monitoring residuals per local fit cycle (=0: none, <0: all, bit 0: first, bit 1: last)
+    INTEGER(mpi) :: measBins=100 !< number of bins per measurement for monitoring
+ 
     ! variables
+    INTEGER(mpi) :: lunmon !< unit for monitoring output file
     INTEGER(mpi) :: lunlog !< unit for logfile
     INTEGER(mpi) :: lvllog !< log level
     INTEGER(mpi) :: ntgb !< total number of global parameters
     INTEGER(mpi) :: nvgb !< number of variable global parameters
-    INTEGER(mpi) :: nagb !< number of fit parameters (global par. + Lagrange mult.)
+    INTEGER(mpi) :: nagb !< number of all parameters (global par. + Lagrange mult.)
+    INTEGER(mpi) :: nfgb !< number of fit parameters
     INTEGER(mpi) :: ncgb !< number of constraints
+    INTEGER(mpi) :: ncgbe !< number of empty constraints (no variable parameters)
+    INTEGER(mpi), DIMENSION(2) :: nprecond !< number of constraints, matrix size for preconditioner
     INTEGER(mpi) :: nagbn !< max number of global paramters per record
     INTEGER(mpi) :: nalcn !< max number of local paramters per record
     INTEGER(mpi) :: naeqn !< max number of equations (measurements) per record
-    INTEGER(mpi) :: nrec  !< (current) record number
+    INTEGER(mpi) :: nrec  !< number of records read
+    INTEGER(mpi) :: nrecd !< number of records read containing doubles
     REAL(mps)    :: dflim !< convergence limit
     INTEGER(mpi), DIMENSION(0:3) :: nrejec !< rejected events
     REAL(mps), DIMENSION(0:8) :: times !< cpu time counters
@@ -103,9 +138,12 @@ MODULE mpmod
     INTEGER(mpi) :: nrecal !< number of records
     INTEGER(mpi) :: ndefec=0 !< rank deficit for global matrix (from inversion)
     INTEGER(mpi) :: nmiss1=0 !< rank deficit for constraints
+    INTEGER(mpi) :: nalow=0 !< (sum of) global parameters with too few accepted entries
     INTEGER(mpi) :: lcalcm !< last calclation mode
     INTEGER(mpi) :: nspc   !< number of precision for sparse global matrix (1=D, 2=D+F)
     INTEGER(mpi) :: nencdb !< encoding info (number bits for column counter)
+    INTEGER(mpi) :: numMeas !< number of measurement groups for monitoring
+    REAL(mpd), PARAMETER :: measBinSize=0.1 !< bins size for monitoring 
     INTEGER(mpi), DIMENSION(100) :: lbmnrs !< MINRES error labels
     REAL(mpd) :: fvalue !< function value (chi2 sum) solution
     REAL(mpd) :: flines !< function value line search
@@ -129,18 +167,25 @@ MODULE mpmod
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: globalParameter !< global parameters (start values + sum(x_i))
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: globalParCopy !< copy of global parameters
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: globalCorrections !< correction x_i (from A*x_i=b_i in iteration i)
-    REAL(mps), DIMENSION(:), ALLOCATABLE :: globalParStart     !< start value for global parameters
-    REAL(mps), DIMENSION(:), ALLOCATABLE :: globalParPreSigma  !< pre-sigma for global parameters
-    REAL(mps), DIMENSION(:), ALLOCATABLE :: globalParPreWeight !< weight from pre-sigma
+    REAL(mpd), DIMENSION(:), ALLOCATABLE :: globalParStart     !< start value for global parameters
+    REAL(mpd), DIMENSION(:), ALLOCATABLE :: globalParPreSigma  !< pre-sigma for global parameters
+    REAL(mpd), DIMENSION(:), ALLOCATABLE :: globalParPreWeight !< weight from pre-sigma
+    INTEGER(mpi), DIMENSION(:), ALLOCATABLE :: globalParCounts !< global parameters counts (from binary files)
+    INTEGER(mpi), DIMENSION(:), ALLOCATABLE :: globalParCons !< global parameters (number of) constraints
     ! global matrix, vector
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: globalMatD !< global matrix 'A' (double, full or sparse)
     REAL(mps), DIMENSION(:), ALLOCATABLE :: globalMatF !< global matrix 'A' (float part for compressed sparse)
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: globalVector !< global vector 'x' (in A*x=b)
+    INTEGER(mpi), DIMENSION(:), ALLOCATABLE :: globalCounter !< global counter (entries in 'x')
+    ! AVPROD (A*x=b) by MINRES
+    REAL(mpd), DIMENSION(:), ALLOCATABLE :: vecXav !< vector x for AVPROD (A*x=b)
+    REAL(mpd), DIMENSION(:), ALLOCATABLE :: vecBav !< vector b for AVPROD (A*x=b)
     ! preconditioning
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: matPreCond !< preconditioner (band) matrix
     INTEGER(mpi), DIMENSION(:), ALLOCATABLE :: indPreCond !< preconditioner pointer array
     ! auxiliary vectors
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: workspaceD !< (general) workspace (D)
+    REAL(mpd), DIMENSION(:), ALLOCATABLE :: workspaceDiag !< diagonal of global matrix (for global corr.)
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: workspaceLinesearch !< workspace line search
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: workspaceDiagonalization !< workspace diag.
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: workspaceEigenValues !< workspace eigen values
@@ -149,6 +194,11 @@ MODULE mpmod
     ! constraint matrix, residuals
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: matConsProduct !< product matrix of constraints
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: vecConsResiduals !< residuals of constraints
+    REAL(mpd), DIMENSION(:), ALLOCATABLE :: vecConsSolution !< solution for constraint elimination
+    ! monitoring of input residuals
+    INTEGER(mpi), DIMENSION(:), ALLOCATABLE :: measIndex !< mapping of 1. global label to measurement index
+    INTEGER(mpi), DIMENSION(:), ALLOCATABLE :: measHists !< measurement histograms (100 bins per thread)
+    REAL(mpd), DIMENSION(:), ALLOCATABLE :: measRes !< average measurement error   
     ! global parameter mapping
     INTEGER(mpi), DIMENSION(:,:), ALLOCATABLE :: globalParLabelIndex !< global parameters label, total -> var. index
     INTEGER(mpi), DIMENSION(:), ALLOCATABLE :: globalParHashTable    !< global parameters hash table
@@ -172,7 +222,8 @@ MODULE mpmod
     INTEGER(mpi), DIMENSION(:,:), ALLOCATABLE :: readBufferInfo !< buffer management (per thread)
     INTEGER(mpi), DIMENSION(:), ALLOCATABLE :: readBufferPointer !< pointer to used buffers
     INTEGER(mpi), DIMENSION(:), ALLOCATABLE :: readBufferDataI !< integer data
-    REAL(mps), DIMENSION(:), ALLOCATABLE :: readBufferDataF !< float data
+    REAL(mpr4), DIMENSION(:), ALLOCATABLE :: readBufferDataF !< float data
+    REAL(mpr8), DIMENSION(:), ALLOCATABLE :: readBufferDataD !< double data
     ! global parameter usage in record
     INTEGER(mpi), DIMENSION(:), ALLOCATABLE :: globalIndexUsage !< indices of global par in record
     INTEGER(mpi), DIMENSION(:), ALLOCATABLE :: backIndexUsage   !< list of global par in record
@@ -188,7 +239,7 @@ MODULE mpmod
     REAL(mpd), DIMENSION(:), ALLOCATABLE::vzru !< local fit 'border solution'
     REAL(mpd), DIMENSION(:), ALLOCATABLE::scdiag !< local fit workspace (D)
     INTEGER(mpi), DIMENSION(:), ALLOCATABLE:: scflag         !< local fit workspace (I)
-    REAL(mps), DIMENSION(:), ALLOCATABLE :: localCorrections !< local fit corrections (to residuals)
+    REAL(mpd), DIMENSION(:), ALLOCATABLE :: localCorrections !< local fit corrections (to residuals)
     REAL(mpd), DIMENSION(:), ALLOCATABLE :: localGlobalMatrix !< matrix correlating local and global par
     ! update of global matrix
     INTEGER(mpi), DIMENSION(:,:), ALLOCATABLE :: writeBufferInfo  !< write buffer management (per thread)
